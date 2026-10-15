@@ -1,0 +1,9 @@
+# Match names (when AEH doesn't cover it)
+
+Use match names, not display names (they survive localized AE). `AEH.prop` lists valid children when a path is wrong.
+
+- Transform `ADBE Transform Group` > `ADBE Anchor Point` `ADBE Position` `ADBE Scale` `ADBE Rotate Z` `ADBE Opacity`; 3D: `ADBE Orientation` `ADBE Rotate X/Y`.
+- Effects `ADBE Effect Parade`: `ADBE Gaussian Blur 2`, `ADBE Ramp`, `ADBE Glo2` (Glow), `ADBE Drop Shadow`, `ADBE Fill`, `ADBE Tint`, `ADBE Noise`, `ADBE Fractal Noise`, `ADBE Motion Blur` (directional), `ADBE Turbulent Displace`, `ADBE Displacement Map`, `CC Particle World`, `ADBE Venetian Blinds`, `ADBE Linear Wipe`, `ADBE Radial Wipe`. Third-party: `AEH.listEffects("name")`.
+- Text: `ADBE Text Properties` > `ADBE Text Document`; animators `ADBE Text Animators` > `ADBE Text Animator` > `ADBE Text Animator Properties` (`ADBE Text Position 3D`, `ADBE Text Opacity`, `ADBE Text Scale 3D`, `ADBE Text Rotation`, `ADBE Text Blur`, `ADBE Text Tracking Amount`) and `ADBE Text Selectors` > `ADBE Text Selector` (`ADBE Text Percent Start/End/Offset`; advanced `ADBE Text Range Advanced` > `ADBE Text Range Type2` (2 chars, 3 words, 4 lines), `ADBE Text Range Shape` (1 square, 2 ramp up, 3 ramp down, 4 triangle, 5 round, 6 smooth), `ADBE Text Selector Max Amount`).
+- Shapes: root `ADBE Root Vectors Group`; `ADBE Vector Group` > `ADBE Vectors Group`: `ADBE Vector Shape - Rect|Ellipse|Star|Group`, `ADBE Vector Graphic - Fill|Stroke|G-Fill|G-Stroke`, `ADBE Vector Filter - Trim|Repeater|Offset|RoundCorner|Merge|Twist|Zigzag|Wiggler`; group transform `ADBE Vector Transform Group`. Trim Paths only affects paths ABOVE it and must sit above the stroke (`AEH.drawOn` handles it).
+- Audio `ADBE Audio Group` > `ADBE Audio Levels` ([dB, dB]). Markers `ADBE Marker`. Time remap `ADBE Time Remapping` (set `layer.timeRemapEnabled = true` first).

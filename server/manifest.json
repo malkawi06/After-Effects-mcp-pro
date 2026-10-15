@@ -1,0 +1,86 @@
+{
+  "manifest_version": "0.2",
+  "name": "after-effects-mcp-pro",
+  "display_name": "After Effects MCP Pro",
+  "version": "1.2.0",
+  "description": "Senior-level control of a live After Effects session: ExtendScript with a pro motion library, expert visual review and reference comparison, beat detection, checkpoints, background renders, TTS, on-demand expert guides and opt-in memory. Requires the Claude Bridge CEP panel.",
+  "author": {
+    "name": "Mohammad Malkawi",
+    "url": "https://github.com/malkawi06"
+  },
+  "license": "MIT",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/index.js"
+      ]
+    }
+  },
+  "tools": [
+    {
+      "name": "ae_status",
+      "description": "Bridge check"
+    },
+    {
+      "name": "ae_run_jsx",
+      "description": "ExtendScript + AEH library"
+    },
+    {
+      "name": "ae_inspect",
+      "description": "Project / comp inspection"
+    },
+    {
+      "name": "ae_preview",
+      "description": "Frames as an image"
+    },
+    {
+      "name": "ae_review",
+      "description": "Visual review, QA checks, reference compare"
+    },
+    {
+      "name": "ae_reference",
+      "description": "Analyse image/video/audio references (beats)"
+    },
+    {
+      "name": "ae_checkpoint",
+      "description": "Project snapshots and revert"
+    },
+    {
+      "name": "ae_render",
+      "description": "Background H.264 render"
+    },
+    {
+      "name": "ae_render_status",
+      "description": "Render progress"
+    },
+    {
+      "name": "ae_tts",
+      "description": "Voice-over from OS voices"
+    },
+    {
+      "name": "ae_guide",
+      "description": "On-demand expert recipes"
+    },
+    {
+      "name": "ae_memory",
+      "description": "Opt-in saved knowledge"
+    }
+  ],
+  "compatibility": {
+    "platforms": [
+      "win32",
+      "darwin"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/malkawi06/After-Effects-mcp-pro"
+  },
+  "homepage": "https://github.com/malkawi06/After-Effects-mcp-pro"
+}

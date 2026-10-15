@@ -1,0 +1,5 @@
+node_modules/
+server/dist/
+*.mcpb
+.DS_Store
+Thumbs.db

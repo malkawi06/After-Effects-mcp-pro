@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Claude Bridge</title>
+<style>
+  :root { --bg:#232323; --fg:#d6d6d6; --dim:#8a8a8a; --ok:#3ccf7a; --err:#ff5c5c; --line:#353535; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:11px/1.4 "Segoe UI", sans-serif; }
+  body { display:flex; flex-direction:column; padding:8px; box-sizing:border-box; gap:6px; }
+  header { display:flex; align-items:center; gap:6px; }
+  #dot { width:9px; height:9px; border-radius:50%; background:var(--err); flex:none; }
+  #dot.on { background:var(--ok); }
+  #status { flex:1; }
+  label { display:flex; align-items:center; gap:4px; color:var(--dim); }
+  #log { flex:1; overflow:auto; border:1px solid var(--line); padding:4px; font-family:Consolas, monospace; font-size:10px; }
+  #log div { white-space:pre-wrap; word-break:break-all; border-bottom:1px solid var(--line); padding:2px 0; }
+  .err { color:var(--err); }
+</style>
+</head>
+<body>
+  <header><span id="dot"></span><span id="status">Starting…</span></header>
+  <label><input type="checkbox" id="allowRaw"> Allow Claude to run raw ExtendScript</label>
+  <label><input type="checkbox" id="readOnly"> Read-only (Claude can look, not change)</label>
+  <div id="log"></div>
+  <script src="main.js"></script>
+</body>
+</html>
