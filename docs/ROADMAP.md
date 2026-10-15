@@ -48,3 +48,6 @@ Agreed with the project owner (Mohammad Malkawi), October 2026.
 6. README, repo and release.
 
 After each phase there is a live test on a real After Effects setup, reported before moving on.
+
+## Later (agreed, not started)
+- **Reference gallery for the client:** during the brief, the tool shows the user a few clips or links from different sites (prompt-motion, Motionographer, Vimeo, Dribbble, Behance) matching what they describe. The user picks or reacts ("like this, but darker"), and that choice guides the plan.
