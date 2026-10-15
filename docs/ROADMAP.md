@@ -50,5 +50,6 @@ Agreed with the project owner (Mohammad Malkawi), October 2026.
 After each phase there is a live test on a real After Effects setup, reported before moving on.
 
 ## Later (agreed, not started)
+- **TOP PRIORITY — real music sync:** the owner's most important requirement. Lesson from promo v1: a beat grid from BPM alone gave cuts twice too fast and hits off the real kicks/snares. Needed: detect the felt pulse (half-time vs BPM), bars and phrases, real kick/snare/accent onsets and quiet sections; `ae_music use` drops typed markers (bar, phrase, kick, snare, drop, break); `ae_review` scores every cut/keyframe against the nearest real accent and flags cuts faster than the felt pulse.
 - **Font choice in the brief:** ask which font style the user wants (or show 3 options from installed fonts) before styleframes.
 - **Reference gallery for the client:** during the brief, the tool shows the user a few clips or links from different sites (prompt-motion, Motionographer, Vimeo, Dribbble, Behance) matching what they describe. The user picks or reacts ("like this, but darker"), and that choice guides the plan.
