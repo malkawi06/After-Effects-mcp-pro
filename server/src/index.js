@@ -18,6 +18,8 @@ import gExpressions from "../guides/expressions.md";
 import gDeliver from "../guides/deliver.md";
 import gReference from "../guides/reference.md";
 import gMatch from "../guides/matchnames.md";
+import gInspire from "../guides/inspiration.md";
+import gMusic from "../guides/music.md";
 
 const CFG_PATH = path.join(os.homedir(), ".ae-claude-bridge.json");
 const WORK_DIR = path.join(os.homedir(), "Documents", "AE-Claude");
@@ -371,12 +373,17 @@ function tts({ text: t, voice, rate, ssml, out }) {
 }
 
 // ---------------- MCP server ----------------
-const INSTRUCTIONS = `Controls a live Adobe After Effects session through the Claude Bridge panel.
-The user's prompt is the brief — follow it. Saved knowledge (ae_memory) is opt-in: consult it only when the user
-mentions their style/recipes/past work, and save only when they explicitly ask. If they give a reference (file),
-analyse it with ae_reference (audio -> beats), then replicate/improve; ae_review reference=<video> compares.
-Workflow: ae_status -> ae_inspect -> (ae_checkpoint create on user projects) -> small ae_run_jsx steps -> ae_review
--> fix -> ae_render. ae_guide <topic> loads expert recipes only when needed.
+const INSTRUCTIONS = `Controls a live Adobe After Effects session through the Claude Bridge panel. Use these tools for ANY After Effects,
+motion-graphics, animation or video request (also Arabic: افتر افكتس، موشن، انيميشن، مقطع، فيديو، مونتاج).
+New piece, always in this order: (1) inspiration: ae_guide inspiration, find 3-5 references, save what you learn as
+ae_memory technique cards (automatic), and ae_memory search for cards learned earlier; (2) music: ae_music search
+(ae_guide music to add tracks; royalty-free, license checked); (3) a written plan with timing (scenes, copy, rhythm, music,
+which idea came from which reference); (4) styleframes: build key frames in AE and show them with ae_preview; (5) WAIT for
+the user's approval; (6) build in small ae_run_jsx steps, ae_review, fix until clean; (7) show the user, wait for approval,
+then ae_render. Edits to existing work: ae_inspect -> ae_checkpoint create -> edit -> ae_review.
+Learning: technique cards are saved automatically; the user's personal style is saved only when they ask. Learn ideas,
+never copy a design. A reference file the user gives: ae_reference (audio -> beats); ae_review reference=<video> compares.
+ae_guide <topic> loads expert recipes only when needed.
 ae_run_jsx runs ExtendScript (ES3: var only, no let/const/arrows/JSON/Array.map/forEach/indexOf; parenthesize nested
 a?b:(c?d:e) — ExtendScript mis-parses chained ternaries). Last expression is returned as JSON. One undo group per
 call; undo:false for code that saves. AEH: comp layer layers(comp,"selected"|"all"|/re/|[..]) prop hex importFile
@@ -384,10 +391,10 @@ listEffects catalog(fonts|presets|templates) applyPreset | anim(prop,[[t,v]],cur
 expo snap linear hold) | expr(prop, wiggle|bounce|loop|pingpong|spin|follow|blink, opts) | text(comp,str,{font,size,
 color,tracking,justify,pos}) textAnim(layer, rise|drop|pop|blur|fade|typewriter|tracking, {start,dur,curve,by,amount}) |
 shape(comp, rect|ellipse|star|path, {...}) drawOn(layer,t0,t1,curve) bg(comp,inner,outer,kind) fx(layer,matchName,
-{param:value}) precompose stagger(layers,frames,start) marker audio(comp,path,t,db) recipe(name,args).
+{param:value}) fxParam(effect,name) precompose stagger(layers,frames,start) marker audio(comp,path,t,db) recipe(name,args).
 Never render inside ae_run_jsx; use ae_render. Voice-over: ae_tts then AEH.audio.`;
 
-const server = new McpServer({ name: "after-effects-claude-bridge", version: "1.2.0" }, { instructions: INSTRUCTIONS });
+const server = new McpServer({ name: "after-effects-claude-bridge", version: "1.3.0" }, { instructions: INSTRUCTIONS });
 
 server.registerTool("ae_status", {
   description: "Bridge check: AE version, project, active comp.",
@@ -613,25 +620,51 @@ const KFILES = { lesson: "lessons.md", style: "style.md", note: "notes.md" };
 const recipeDir = path.join(KDIR, "recipes");
 const safeName = (s) => String(s).toLowerCase().replace(/[^a-z0-9-_]+/g, "-").replace(/^-+|-+$/g, "");
 
+const techDir = path.join(KDIR, "techniques");
+const words = (q) => String(q || "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 1);
+
 server.registerTool("ae_memory", {
-  description: "Opt-in saved lessons/style/notes/recipes (AEH.recipe). Read only when the user refers to them; save only when asked.",
+  description: "Saved knowledge. technique = cards learned from references (save automatically when you learn one). lesson/note/recipe/style: style only when the user asks. search finds cards, lessons and recipes by words.",
   inputSchema: {
-    action: z.enum(["list", "read", "save", "delete"]),
-    kind: z.enum(["lesson", "style", "note", "recipe"]).optional(),
+    action: z.enum(["list", "read", "save", "delete", "search"]),
+    kind: z.enum(["technique", "lesson", "style", "note", "recipe"]).optional(),
     name: z.string().optional(),
-    content: z.string().optional(),
+    content: z.string().optional().describe("technique: what it is, how to build it in AE, when to use it"),
+    tags: z.array(z.string()).optional(),
+    source: z.string().optional().describe("technique: URL / creator it was learned from"),
     code: z.string().optional().describe("must define function recipe(args)"),
     match: z.string().optional().describe("substring of line to delete"),
+    query: z.string().optional(),
   },
-}, tool(async ({ action, kind, name, content, code, match }) => {
-  fs.mkdirSync(recipeDir, { recursive: true });
+}, tool(async ({ action, kind, name, content, tags, source, code, match, query }) => {
+  fs.mkdirSync(recipeDir, { recursive: true }); fs.mkdirSync(techDir, { recursive: true });
   const recipes = () => fs.readdirSync(recipeDir).filter((f) => f.endsWith(".jsx")).map((f) => f.slice(0, -4));
+  const techs = () => fs.readdirSync(techDir).filter((f) => f.endsWith(".md")).map((f) => f.slice(0, -3));
+  const card = (n) => fs.readFileSync(path.join(techDir, `${n}.md`), "utf8");
   const lines = (k) => { const f = path.join(KDIR, KFILES[k]); return fs.existsSync(f) ? fs.readFileSync(f, "utf8").split("\n").filter(Boolean) : []; };
   if (action === "list") {
-    return text({ folder: KDIR, lessons: lines("lesson").length, style: lines("style").length, notes: lines("note").length,
+    return text({ folder: KDIR, techniques: techs().length, lessons: lines("lesson").length, style: lines("style").length, notes: lines("note").length,
       recipes: recipes().map((r) => { const d = path.join(recipeDir, `${r}.md`); return fs.existsSync(d) ? `${r}: ${fs.readFileSync(d, "utf8").split("\n")[0]}` : r; }) });
   }
+  if (action === "search") {
+    const q = words(query); if (!q.length) throw new Error("query is required");
+    const docs = [...techs().map((n) => ["technique", n, card(n)]), ...recipes().map((n) => { const d = path.join(recipeDir, `${n}.md`); return ["recipe", n, fs.existsSync(d) ? fs.readFileSync(d, "utf8") : n]; }),
+      ...lines("lesson").map((l, i) => ["lesson", String(i), l])];
+    const hits = docs.map(([k, n, body]) => { const b = (n + " " + body).toLowerCase(); return [q.reduce((sc, w) => sc + (b.includes(w) ? (n.includes(w) ? 3 : 1) : 0), 0), k, n, body]; })
+      .filter((h) => h[0] > 0).sort((x, y) => y[0] - x[0]).slice(0, 8);
+    return text(hits.map(([, k, n, body]) => `${k} ${n}: ${body.split("\n").find((l) => l && !l.startsWith("tags:") && !l.startsWith("source:")) || ""}`.slice(0, 160)).join("\n") || "(no matches)");
+  }
   if (!kind) throw new Error("kind is required");
+  if (kind === "technique") {
+    if (action === "read") { if (!name) return text(techs()); return text(card(safeName(name))); }
+    const n = safeName(name || "");
+    if (action === "save") {
+      if (!n || !content) throw new Error("technique needs name and content");
+      fs.writeFileSync(path.join(techDir, `${n}.md`), `${content.trim()}\ntags: ${(tags || []).join(", ")}\nsource: ${source || "unknown"}\nsaved: ${new Date().toISOString().slice(0, 10)}\n`);
+      return text(`Saved technique ${n}.`);
+    }
+    fs.rmSync(path.join(techDir, `${n}.md`), { force: true }); return text(`Deleted technique ${n}.`);
+  }
   if (action === "read") {
     if (kind === "recipe") {
       if (!name) return text(recipes());
@@ -667,6 +700,74 @@ server.registerTool("ae_memory", {
   return text(`Removed ${removed} line(s) from ${KFILES[kind]}.`);
 }));
 
+// ---------------- music library ----------------
+const MUSIC_DIR = path.join(WORK_DIR, "music"), MUSIC_INDEX = path.join(MUSIC_DIR, "index.json");
+const BLOCKED_LICENSE = /\b(nc|nd)\b|non[- ]?commercial|no[- ]?deriv|all rights reserved/i;
+const loadIndex = () => (fs.existsSync(MUSIC_INDEX) ? JSON.parse(fs.readFileSync(MUSIC_INDEX, "utf8")) : []);
+const saveIndex = (ix) => { fs.mkdirSync(MUSIC_DIR, { recursive: true }); fs.writeFileSync(MUSIC_INDEX, JSON.stringify(ix, null, 1)); };
+// loudness (dBFS RMS) and an 8-part energy curve, 0..1 relative to the track's loudest part
+function musicProfile(a) {
+  const parts = 8, per = Math.floor(a.n / parts), rms = [];
+  let all = 0, cnt = 0;
+  for (let p = 0; p < parts; p++) { let s = 0, c = 0; for (let i = p * per; i < (p + 1) * per; i += 32) { const v = a.sample(i); s += v * v; c++; } rms.push(Math.sqrt(s / Math.max(1, c))); all += s; cnt += c; }
+  const mx = Math.max(1e-9, ...rms), loud = 20 * Math.log10(Math.sqrt(all / Math.max(1, cnt)) + 1e-9);
+  const curve = rms.map((v) => +(v / mx).toFixed(2)), mean = curve.reduce((x, y) => x + y, 0) / parts;
+  return { loudness: +loud.toFixed(1), energy: loud > -14 ? "high" : loud > -20 ? "mid" : "low", curve, dynamic: +(1 - mean).toFixed(2) };
+}
+
+server.registerTool("ae_music", {
+  description: "Royalty-free music library. add: copy + analyse a downloaded track (BPM, beats, energy) — license required, NC/ND rejected. search: by tags/mood words, BPM, length, energy. use: import into a comp at a time + beat markers.",
+  inputSchema: {
+    action: z.enum(["add", "search", "use", "list", "remove"]),
+    path: z.string().optional().describe("add: downloaded file (wav/mp3)"),
+    title: z.string().optional(), artist: z.string().optional(),
+    source: z.string().optional().describe("add: page URL"), license: z.string().optional().describe("add: exact license name"),
+    tags: z.array(z.string()).optional().describe("add: mood/genre/use, e.g. cinematic, upbeat, tech, arabic"),
+    query: z.string().optional(), bpm_min: z.number().optional(), bpm_max: z.number().optional(),
+    min_seconds: z.number().optional(), energy: z.enum(["low", "mid", "high"]).optional(),
+    id: z.string().optional(), comp: z.string().optional(), start: z.number().optional().describe("use: comp time (s)"),
+    db: z.number().optional().describe("use: level, default -14"), markers: z.boolean().optional(),
+  },
+}, tool(async (a) => {
+  const ix = loadIndex();
+  if (a.action === "list") return text(ix.map((t) => `${t.id} | ${t.title} — ${t.artist} | ${t.bpm} BPM ${t.duration}s ${t.energy} | ${t.tags.join(", ")} | ${t.license}`).join("\n") || "(empty)");
+  if (a.action === "add") {
+    if (!a.path || !fs.existsSync(a.path)) throw new Error("path to a downloaded wav/mp3 is required");
+    if (!a.license || !a.source) throw new Error("license and source are required");
+    if (BLOCKED_LICENSE.test(a.license)) throw new Error(`License "${a.license}" is not allowed (non-commercial or no-derivatives).`);
+    const dec = await decodeAudio(a.path), b = analyseBeats(dec), prof = musicProfile(dec);
+    const id = safeName(`${a.title || path.basename(a.path, path.extname(a.path))}`).slice(0, 48);
+    const dest = path.join(MUSIC_DIR, "tracks", id + path.extname(a.path).toLowerCase());
+    fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.copyFileSync(a.path, dest);
+    const rec = { id, title: a.title || id, artist: a.artist || "unknown", file: dest, source: a.source, license: a.license, tags: (a.tags || []).map((t) => t.toLowerCase()),
+      bpm: b.bpm, duration: b.duration, beats: b.beats, hits: b.hits, ...prof, added: new Date().toISOString().slice(0, 10) };
+    saveIndex([...ix.filter((t) => t.id !== id), rec]);
+    return text(`Added ${id}: ${rec.bpm} BPM, ${rec.duration}s, ${rec.energy} energy (${rec.loudness} dBFS), curve ${rec.curve.join(" ")}`);
+  }
+  if (a.action === "search") {
+    const q = words(a.query);
+    const res = ix.filter((t) => (a.bpm_min == null || t.bpm >= a.bpm_min) && (a.bpm_max == null || t.bpm <= a.bpm_max) &&
+      (a.min_seconds == null || t.duration >= a.min_seconds) && (!a.energy || t.energy === a.energy))
+      .map((t) => [q.reduce((sc, w) => sc + (t.tags.some((g) => g.includes(w)) ? 2 : 0) + (t.title.toLowerCase().includes(w) ? 1 : 0), 0), t])
+      .filter(([sc]) => !q.length || sc > 0).sort((x, y) => y[0] - x[0]).slice(0, 6);
+    return text(res.map(([, t]) => `${t.id} | ${t.bpm} BPM ${t.duration}s ${t.energy} | curve ${t.curve.join(" ")} | ${t.tags.join(", ")}`).join("\n") ||
+      "(no match — find one with ae_guide music, then ae_music add)");
+  }
+  const t = ix.find((x) => x.id === a.id);
+  if (!t) throw new Error(`No track ${a.id}`);
+  if (a.action === "remove") { saveIndex(ix.filter((x) => x.id !== a.id)); fs.rmSync(t.file, { force: true }); return text(`Removed ${a.id}.`); }
+  // use
+  const start = a.start || 0, file = t.file.replace(/\\/g, "/");
+  const r = await bridge("runJsx", { code: `var c = AEH.comp(${JSON.stringify(a.comp || "")}); var l = AEH.audio(c, ${JSON.stringify(file)}, ${start}, ${a.db ?? -14}); l.name = ${JSON.stringify("♪ " + t.title)}; ({ comp: c.name, layer: l.name })`, undoName: "Add music" });
+  let m = "";
+  if (a.markers !== false) {
+    const times = t.beats.map((x) => +(x + start).toFixed(3));
+    const mk = await bridge("addMarkers", { comp: r.comp, times, labels: times.map((_, i) => String((i % 4) + 1)) });
+    m = `, ${mk.markers} beat markers`;
+  }
+  return text(`${t.title} on ${r.comp} at ${start}s${m}. ${t.bpm} BPM (beat ${(60 / t.bpm).toFixed(3)}s). Credit if required: "${t.title}" by ${t.artist} — ${t.license} — ${t.source}`);
+}));
+
 server.registerTool("ae_checkpoint", {
   description: "Project snapshots: create (before risky edits on user projects), list, revert (snapshots current state first).",
   inputSchema: {
@@ -680,7 +781,7 @@ server.registerTool("ae_checkpoint", {
 
 // On-demand cookbooks: only the requested topic enters the context.
 const GUIDES = { transitions: gTransitions, typography: gTypography, "camera-3d": gCamera, "audio-sync": gAudio,
-  expressions: gExpressions, deliver: gDeliver, reference: gReference, matchnames: gMatch };
+  expressions: gExpressions, deliver: gDeliver, reference: gReference, matchnames: gMatch, inspiration: gInspire, music: gMusic };
 server.registerTool("ae_guide", {
   description: "Expert recipes for one topic, on demand.",
   inputSchema: { topic: z.enum(Object.keys(GUIDES)) },
