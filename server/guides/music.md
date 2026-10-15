@@ -13,7 +13,7 @@ Pick the mood from the plan (e.g. "cinematic tech, builds up, 30 s"), then brows
 
 Rules:
 - Read the license **on the track page** and pass its exact name to `ae_music add`. If the license is unclear, skip the track.
-- Don't click the site's Download button (browser downloads can stall). Get the direct file URL from the track page (e.g. run `[...document.querySelectorAll('audio')].map(a=>a.currentSrc)` in the page; Pixabay files are on `cdn.pixabay.com`) and pass it as `url`. Only https URLs on pixabay.com, freemusicarchive.org and incompetech.com are accepted.
+- Don't click the site's Download button (browser downloads can stall). Get the direct file URL from the track page (Pixabay: run `document.documentElement.innerHTML.match(/https:\/\/cdn\.pixabay\.com\/download\/audio[^"'\s]+?\.mp3[^"'\s]*/)` in the track page, no playback needed; also check the page doesn't say "Content ID Registered") and pass it as `url`. Only https URLs on pixabay.com, freemusicarchive.org and incompetech.com are accepted.
 - If a site needs a login or a captcha, ask the user to download the file and pass `path` instead.
 - Choose length ≥ the piece; trim in AE, never stretch.
 
