@@ -394,7 +394,7 @@ shape(comp, rect|ellipse|star|path, {...}) drawOn(layer,t0,t1,curve) bg(comp,inn
 {param:value}) fxParam(effect,name) precompose stagger(layers,frames,start) marker audio(comp,path,t,db) recipe(name,args).
 Never render inside ae_run_jsx; use ae_render. Voice-over: ae_tts then AEH.audio.`;
 
-const server = new McpServer({ name: "after-effects-claude-bridge", version: "1.3.0" }, { instructions: INSTRUCTIONS });
+const server = new McpServer({ name: "after-effects-claude-bridge", version: "1.3.1" }, { instructions: INSTRUCTIONS });
 
 server.registerTool("ae_status", {
   description: "Bridge check: AE version, project, active comp.",
@@ -715,11 +715,31 @@ function musicProfile(a) {
   return { loudness: +loud.toFixed(1), energy: loud > -14 ? "high" : loud > -20 ? "mid" : "low", curve, dynamic: +(1 - mean).toFixed(2) };
 }
 
+// direct audio download from the royalty-free sources in the music guide only
+const MUSIC_HOSTS = /(^|\.)(pixabay\.com|freemusicarchive\.org|incompetech\.com)$/i, MAX_TRACK = 60 * 1024 * 1024;
+async function downloadTrack(url) {
+  const ok = (u) => { const p = new URL(u); return p.protocol === "https:" && MUSIC_HOSTS.test(p.hostname); };
+  if (!ok(url)) throw new Error("url must be https on pixabay.com, freemusicarchive.org or incompetech.com");
+  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, redirect: "follow" });
+  if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`);
+  if (!ok(res.url)) throw new Error(`redirected outside the allowed sources: ${new URL(res.url).hostname}`);
+  if (+res.headers.get("content-length") > MAX_TRACK) throw new Error("file is larger than 60 MB");
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > MAX_TRACK) throw new Error("file is larger than 60 MB");
+  const ext = buf.slice(0, 4).toString("latin1") === "RIFF" ? ".wav"
+    : (buf.slice(0, 3).toString("latin1") === "ID3" || (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0)) ? ".mp3" : null;
+  if (!ext) throw new Error("not an audio file (expected mp3 or wav) — pass the direct file URL, not the page");
+  const name = safeName(path.basename(new URL(res.url).pathname, path.extname(new URL(res.url).pathname))) || "track";
+  const dest = path.join(MUSIC_DIR, "downloads", name + ext);
+  fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.writeFileSync(dest, buf);
+  return dest;
+}
+
 server.registerTool("ae_music", {
-  description: "Music library (ae_guide music). add: analyse a downloaded track, license required. search. use: import + beat markers.",
+  description: "Music library (ae_guide music). add: url (direct audio file) or path, license + source page required. search. use: import + beat markers.",
   inputSchema: {
     action: z.enum(["add", "search", "use", "list", "remove"]),
-    path: z.string().optional(), title: z.string().optional(), artist: z.string().optional(),
+    url: z.string().optional(), path: z.string().optional(), title: z.string().optional(), artist: z.string().optional(),
     source: z.string().optional(), license: z.string().optional(), tags: z.array(z.string()).optional(),
     query: z.string().optional(), bpm_min: z.number().optional(), bpm_max: z.number().optional(),
     min_seconds: z.number().optional(), energy: z.enum(["low", "mid", "high"]).optional(),
@@ -729,9 +749,10 @@ server.registerTool("ae_music", {
   const ix = loadIndex();
   if (a.action === "list") return text(ix.map((t) => `${t.id} | ${t.title} — ${t.artist} | ${t.bpm} BPM ${t.duration}s ${t.energy} | ${t.tags.join(", ")} | ${t.license}`).join("\n") || "(empty)");
   if (a.action === "add") {
-    if (!a.path || !fs.existsSync(a.path)) throw new Error("path to a downloaded wav/mp3 is required");
     if (!a.license || !a.source) throw new Error("license and source are required");
     if (BLOCKED_LICENSE.test(a.license)) throw new Error(`License "${a.license}" is not allowed (non-commercial or no-derivatives).`);
+    if (a.url) a.path = await downloadTrack(a.url);
+    if (!a.path || !fs.existsSync(a.path)) throw new Error("url (direct audio file) or path to a downloaded wav/mp3 is required");
     const dec = await decodeAudio(a.path), b = analyseBeats(dec), prof = musicProfile(dec);
     const id = safeName(`${a.title || path.basename(a.path, path.extname(a.path))}`).slice(0, 48);
     const dest = path.join(MUSIC_DIR, "tracks", id + path.extname(a.path).toLowerCase());

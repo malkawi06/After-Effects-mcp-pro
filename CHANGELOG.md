@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.3.1
+- `ae_music add` takes `url`: the server downloads the track itself (https on pixabay.com, freemusicarchive.org or incompetech.com only, audio files only, ≤ 60 MB). The license is checked before downloading. Browser downloads are no longer needed.
+
 ## 1.3.0
 - Agreed workflow built in: inspiration → music → timed plan → styleframes → approval → build/review → approval → render. Broad English/Arabic triggers so the tools are used for any AE request.
 - `ae_music`: royalty-free music library (add with license check, search by mood/BPM/length/energy, use with beat markers and credit line).
