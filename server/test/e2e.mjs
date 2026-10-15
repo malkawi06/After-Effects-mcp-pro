@@ -138,6 +138,10 @@ r = await client.callTool({ name: "ae_memory", arguments: { action: "search", qu
 check("memory search finds card", r.content[0].text.startsWith("technique masked-word-swap"), r.content[0].text);
 r = await client.callTool({ name: "ae_music", arguments: { action: "add", path: CLICK, title: "Click Test", artist: "me", source: "https://example.com/t", license: "CC BY-NC 4.0", tags: ["tech"] } });
 check("music rejects NC license", r.isError && r.content[0].text.includes("not allowed"));
+r = await client.callTool({ name: "ae_music", arguments: { action: "add", url: "https://evil.example.com/a.mp3", source: "https://example.com/t", license: "CC BY 4.0" } });
+check("music url: only allowed hosts", r.isError && r.content[0].text.includes("pixabay.com"), r.content[0].text);
+r = await client.callTool({ name: "ae_music", arguments: { action: "add", url: "http://cdn.pixabay.com/a.mp3", source: "https://example.com/t", license: "CC BY 4.0" } });
+check("music url: https only", r.isError && r.content[0].text.includes("https"), r.content[0].text);
 r = await client.callTool({ name: "ae_music", arguments: { action: "add", path: CLICK, title: "Click Test", artist: "me", source: "https://example.com/t", license: "CC BY 4.0", tags: ["Tech", "upbeat"] } });
 check("music add analyses", /120(\.\d)? BPM/.test(r.content[0].text), r.content[0].text);
 r = await client.callTool({ name: "ae_music", arguments: { action: "search", query: "upbeat", bpm_min: 110, bpm_max: 130 } });

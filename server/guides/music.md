@@ -13,11 +13,12 @@ Pick the mood from the plan (e.g. "cinematic tech, builds up, 30 s"), then brows
 
 Rules:
 - Read the license **on the track page** and pass its exact name to `ae_music add`. If the license is unclear, skip the track.
-- Downloads land in the user's Downloads folder. If a site needs a login or a captcha, ask the user to download the file and give you the path.
+- Don't click the site's Download button (browser downloads can stall). Get the direct file URL from the track page (e.g. run `[...document.querySelectorAll('audio')].map(a=>a.currentSrc)` in the page; Pixabay files are on `cdn.pixabay.com`) and pass it as `url`. Only https URLs on pixabay.com, freemusicarchive.org and incompetech.com are accepted.
+- If a site needs a login or a captcha, ask the user to download the file and pass `path` instead.
 - Choose length ≥ the piece; trim in AE, never stretch.
 
 ## Adding
-`ae_music add {path, title, artist, source: <track page URL>, license, tags: [mood, genre, use]}`. Tags in lowercase English: e.g. `cinematic, tech, upbeat, calm, dark, epic, corporate, arabic, lofi, electronic, piano, build-up, logo`.
+`ae_music add {url: <direct audio URL> | path, title, artist, source: <track page URL>, license, tags: [mood, genre, use]}`. The license is checked before anything is downloaded. Tags in lowercase English: e.g. `cinematic, tech, upbeat, calm, dark, epic, corporate, arabic, lofi, electronic, piano, build-up, logo`.
 The tool measures BPM, beats, loudness, energy (low/mid/high) and an 8-part energy curve. You don't hear the music: judge mood from the source's tags and description, and pace from the BPM and curve.
 
 ## Using
