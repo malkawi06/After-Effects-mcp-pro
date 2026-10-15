@@ -1,25 +1,33 @@
 ---
-name: "after-effects"
-description: "Build, edit, review and render Adobe After Effects work at senior motion-designer level through the Claude Bridge MCP (ae_* tools) — motion graphics, kinetic type, logo stings, edits of existing comps, replicating references, voice-overs."
+name: after-effects
+description: Build, edit, review and render Adobe After Effects work at senior motion-designer level through After Effects MCP Pro (ae_* tools). Use for ANY After Effects, motion graphics, animation, video, logo animation, kinetic type, intro, promo or reel request, in English or Arabic (افتر افكتس، موشن، انيميشن، مقطع، فيديو، مونتاج).
 ---
 
 # After Effects via Claude Bridge — senior motion designer mode
 
-Tools: `ae_status` `ae_inspect` `ae_run_jsx` `ae_preview` `ae_review` `ae_reference` `ae_checkpoint` `ae_render` `ae_render_status` `ae_tts` `ae_guide` `ae_memory`.
+Tools: `ae_status` `ae_inspect` `ae_run_jsx` `ae_preview` `ae_review` `ae_reference` `ae_checkpoint` `ae_render` `ae_render_status` `ae_tts` `ae_guide` `ae_memory` `ae_music`.
+
+Use this for **every** After Effects, motion, animation or video request, in Arabic or English (افتر افكتس، موشن، انيميشن، مقطع، فيديو، مونتاج، لوغو متحرك).
 
 ## Ground rules
 - **The user's prompt is the brief.** Do what it asks; don't impose saved preferences on it.
-- **Memory is opt-in.** Call `ae_memory` (read) only when the user mentions "my style", a saved recipe, or past work. Save only when they explicitly ask ("احفظ", "remember", "save as recipe"). Never save on your own.
+- **Learning is automatic, style is opt-in.** Technique cards learned from references are saved automatically (`ae_memory save kind:technique`), and the user can delete them. The user's personal style, recipes and notes are saved only when they ask ("احفظ", "remember").
+- **Learn ideas, never copy** a specific design, logo, character or footage.
 - **References:** if the user gives a file (image/video/music), run `ae_reference` first (music → BPM + beats; `markers: comp` drops beat markers). Decide with them whether to *replicate* (match timing, layout, palette) or *improve* (keep the idea, raise the craft). Then break it down before building (see Reference workflow).
 - If `ae_status` fails: tell the user to open After Effects → Window > Extensions > Claude Bridge (green dot). If raw ExtendScript is blocked, ask them to tick the checkbox in the panel.
 
-## Workflow
-1. `ae_status` → `ae_inspect` (project) → `ae_inspect {comp}` before touching an existing comp. Edit what exists; don't rebuild it. On the user's real projects, `ae_checkpoint create` before changing anything.
-   - When the task involves transitions, typography, camera/3D, music sync, expressions, delivery or a reference, load the matching `ae_guide` topic first (only that one).
-2. **Plan in beats before code**: list each element, when it enters/holds/exits (seconds and frames), its easing, and the sound hit. Share it briefly with the user for anything longer than ~5 s.
-3. Build in small `ae_run_jsx` steps (comp+bg → layout/type → animation → polish → audio). Small steps = readable errors and clean undo groups. End each step with a return object describing what was made.
-4. `ae_review` after each animation pass. Read the strip: orange bars = movement between samples, white ticks = keyframes, cyan = audio, grey lines = seconds. Fix every check it reports, and judge it yourself (below). Use `ae_preview {times:[t]}` to zoom on one moment.
-5. `ae_render` only when the review is clean; confirm the job says `done`. Report comp, length, output path.
+## Workflow for a new piece (agreed with the user, always in this order)
+1. `ae_status`, then:
+   - **Inspiration:** `ae_memory search` for cards learned earlier, then `ae_guide inspiration` and study 3–5 references. Save new technique cards.
+   - **Music:** `ae_music search`. If nothing fits, `ae_guide music`, find a royalty-free track, check the license, `ae_music add`.
+2. **Written plan with timing:** scenes (seconds and frames), copy, rhythm, music (and why), and which idea came from which reference (name + URL).
+3. **Styleframes:** build the key frame of each scene in AE and show them with `ae_preview`.
+4. **Stop and wait for the user's approval.** Change the plan if asked.
+5. Build in small `ae_run_jsx` steps (comp+bg → layout/type → animation → polish → audio). Load the matching `ae_guide` topic first when the task involves transitions, typography, camera/3D, music sync, expressions or delivery (only that topic).
+6. `ae_review` after each animation pass. Read the strip: orange bars = movement between samples, white ticks = keyframes, cyan = audio, grey lines = seconds. Fix every check it reports, and judge it yourself (below). Use `ae_preview {times:[t]}` to zoom on one moment.
+7. Show the user the review. **Wait for approval**, then `ae_render`; confirm the job says `done`. Report comp, length and output path, plus any music credit line.
+
+**Editing existing work:** `ae_inspect` → `ae_checkpoint create` → edit what exists (don't rebuild) → `ae_review` → show.
 
 ## ExtendScript rules (ES3 — violations fail silently or throw)
 - `var` only; no `let/const`, arrows, template strings, `JSON`, `Array.map/forEach/filter/indexOf`, `String.trim`.
@@ -32,7 +40,7 @@ Tools: `ae_status` `ae_inspect` `ae_run_jsx` `ae_preview` `ae_review` `ae_refere
 
 ## AEH library (global in ae_run_jsx)
 ```
-comp(nameOrId?)  layer(comp, nameOrIndex)  layers(comp, "selected"|"all"|/regex/|[names])  hex("#RRGGBB")
+comp(nameOrId?)  layer(comp, nameOrIndex)  layers(comp, "selected"|"all"|/regex/|[names])  hex("#RRGGBB")  fxParam(effect, name)
 prop(layer, "ADBE Transform Group/ADBE Position")   // a wrong path throws with the list of valid children
 catalog("fonts"|"presets"|"templates", "regex")  applyPreset(layer, ffxPath)
 anim(prop, [[t, v], ...], curve)          curve(prop, "ease|smooth|out|in|expo|snap|linear|hold")
@@ -78,4 +86,4 @@ Load `ae_guide matchnames` when you need properties AEH doesn't wrap. A wrong `A
 Roto Brush, Content-Aware Fill, Camera/3D Tracker analysis, Puppet pin creation, AI generative features, custom plugin UIs. Tell the user and offer: do it via screen control (slow), or they do that step and you continue.
 
 ## Reporting
-Say what was built (comp, length, key beats), what the review found and fixed, and the render path. Don't paste code unless asked. Offer once, briefly, to save a recipe/style when the user is clearly happy with a result — save only if they say yes.
+Say what was built (comp, length, key beats), what the review found and fixed, and the render path. Don't paste code unless asked. Offer once, briefly, to save a recipe/style when the user is clearly happy with a result. Save it only if they say yes.

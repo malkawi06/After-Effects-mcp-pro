@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0
+- Agreed workflow built in: inspiration → music → timed plan → styleframes → approval → build/review → approval → render. Broad English/Arabic triggers so the tools are used for any AE request.
+- `ae_music`: royalty-free music library (add with license check, search by mood/BPM/length/energy, use with beat markers and credit line).
+- `ae_memory`: technique cards learned from references (saved automatically) and word search across cards, lessons and recipes.
+- Guides: `inspiration` (prompt-motion, Motionographer, Vimeo Staff Picks, Dribbble, Behance), `music` (sources and licenses).
+- Review: title-safe check from real layer bounds; sound effects with no visual hit; motion-blur warnings only for spatial motion.
+- AEH: `fxParam` for flattened effect groups; text measurement retries on first font use.
+
 ## 1.2.0
 - `ae_checkpoint`: project snapshots and safe revert.
 - `ae_reference` on audio (WAV/MP3): BPM, beat grid, strong hits, optional beat markers.

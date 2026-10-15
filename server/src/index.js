@@ -624,14 +624,14 @@ const techDir = path.join(KDIR, "techniques");
 const words = (q) => String(q || "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 1);
 
 server.registerTool("ae_memory", {
-  description: "Saved knowledge. technique = cards learned from references (save automatically when you learn one). lesson/note/recipe/style: style only when the user asks. search finds cards, lessons and recipes by words.",
+  description: "Knowledge: technique cards (auto-save what you learn from references), lessons, notes, recipes; style only when asked. search by words.",
   inputSchema: {
     action: z.enum(["list", "read", "save", "delete", "search"]),
     kind: z.enum(["technique", "lesson", "style", "note", "recipe"]).optional(),
     name: z.string().optional(),
-    content: z.string().optional().describe("technique: what it is, how to build it in AE, when to use it"),
+    content: z.string().optional(),
     tags: z.array(z.string()).optional(),
-    source: z.string().optional().describe("technique: URL / creator it was learned from"),
+    source: z.string().optional(),
     code: z.string().optional().describe("must define function recipe(args)"),
     match: z.string().optional().describe("substring of line to delete"),
     query: z.string().optional(),
@@ -716,17 +716,14 @@ function musicProfile(a) {
 }
 
 server.registerTool("ae_music", {
-  description: "Royalty-free music library. add: copy + analyse a downloaded track (BPM, beats, energy) — license required, NC/ND rejected. search: by tags/mood words, BPM, length, energy. use: import into a comp at a time + beat markers.",
+  description: "Music library (ae_guide music). add: analyse a downloaded track, license required. search. use: import + beat markers.",
   inputSchema: {
     action: z.enum(["add", "search", "use", "list", "remove"]),
-    path: z.string().optional().describe("add: downloaded file (wav/mp3)"),
-    title: z.string().optional(), artist: z.string().optional(),
-    source: z.string().optional().describe("add: page URL"), license: z.string().optional().describe("add: exact license name"),
-    tags: z.array(z.string()).optional().describe("add: mood/genre/use, e.g. cinematic, upbeat, tech, arabic"),
+    path: z.string().optional(), title: z.string().optional(), artist: z.string().optional(),
+    source: z.string().optional(), license: z.string().optional(), tags: z.array(z.string()).optional(),
     query: z.string().optional(), bpm_min: z.number().optional(), bpm_max: z.number().optional(),
     min_seconds: z.number().optional(), energy: z.enum(["low", "mid", "high"]).optional(),
-    id: z.string().optional(), comp: z.string().optional(), start: z.number().optional().describe("use: comp time (s)"),
-    db: z.number().optional().describe("use: level, default -14"), markers: z.boolean().optional(),
+    id: z.string().optional(), comp: z.string().optional(), start: z.number().optional(), db: z.number().optional(), markers: z.boolean().optional(),
   },
 }, tool(async (a) => {
   const ix = loadIndex();

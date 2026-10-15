@@ -18,7 +18,7 @@ fs.chmodSync(fakeAerender, 0o755);
 
 const handlers = {
   status: () => ({ aeVersion: "26.3", activeComp: "Main", dirty: true }),
-  runJsx: (a) => (a.code === "boom" ? { __err: "Error: boom", line: 3 } : { echoed: a.code, undo: a.undo ?? true }),
+  runJsx: (a) => (a.code === "boom" ? { __err: "Error: boom", line: 3 } : a.undoName === "Add music" ? { comp: "Main", layer: "x" } : { echoed: a.code, undo: a.undo ?? true }),
   inspect: (a) => ({ comp: a.comp ?? null }),
   frames: (a) => {
     const frames = a.times.map((t, i) => {
@@ -76,8 +76,8 @@ await client.connect(new StdioClientTransport({ command: "node", args: [process.
 const check = (name, cond, extra = "") => { console.log(`${cond ? "PASS" : "FAIL"} ${name} ${extra}`); if (!cond) process.exitCode = 1; };
 
 const tools = (await client.listTools()).tools.map((t) => t.name).sort();
-check("tools listed", tools.join() === "ae_checkpoint,ae_guide,ae_inspect,ae_memory,ae_preview,ae_reference,ae_render,ae_render_status,ae_review,ae_run_jsx,ae_status,ae_tts", tools.join());
-check("instructions", (client.getInstructions() || "").includes("textAnim"));
+check("tools listed", tools.join() === "ae_checkpoint,ae_guide,ae_inspect,ae_memory,ae_music,ae_preview,ae_reference,ae_render,ae_render_status,ae_review,ae_run_jsx,ae_status,ae_tts", tools.join());
+check("instructions", (client.getInstructions() || "").includes("textAnim") && client.getInstructions().includes("WAIT for") && client.getInstructions().includes("افتر"));
 
 let r = await client.callTool({ name: "ae_status", arguments: {} });
 check("status", r.content[0].text.includes("26.3"));
@@ -132,6 +132,20 @@ r = await client.callTool({ name: "ae_guide", arguments: { topic: "transitions" 
 check("guide loads on demand", r.content[0].text.startsWith("# Transitions"));
 r = await client.callTool({ name: "ae_run_jsx", arguments: { code: "1+1", undo_name: "two", save_as: "Add Two" } });
 check("run_jsx save_as recipe", JSON.parse(r.content[0].text).savedRecipe === "add-two" && fs.readFileSync(path.join(HOME, "Documents/AE-Claude/knowledge/recipes/add-two.jsx"), "utf8").includes('eval("1+1")'));
+r = await client.callTool({ name: "ae_memory", arguments: { action: "save", kind: "technique", name: "Masked word swap", tags: ["kinetic-type", "transition"], source: "https://example.com/x", content: "What: words swap behind a mask on one baseline\nIn AE: track matte rect, 8f expo" } });
+check("technique save", r.content[0].text.includes("masked-word-swap"));
+r = await client.callTool({ name: "ae_memory", arguments: { action: "search", query: "kinetic swap" } });
+check("memory search finds card", r.content[0].text.startsWith("technique masked-word-swap"), r.content[0].text);
+r = await client.callTool({ name: "ae_music", arguments: { action: "add", path: CLICK, title: "Click Test", artist: "me", source: "https://example.com/t", license: "CC BY-NC 4.0", tags: ["tech"] } });
+check("music rejects NC license", r.isError && r.content[0].text.includes("not allowed"));
+r = await client.callTool({ name: "ae_music", arguments: { action: "add", path: CLICK, title: "Click Test", artist: "me", source: "https://example.com/t", license: "CC BY 4.0", tags: ["Tech", "upbeat"] } });
+check("music add analyses", /120(\.\d)? BPM/.test(r.content[0].text), r.content[0].text);
+r = await client.callTool({ name: "ae_music", arguments: { action: "search", query: "upbeat", bpm_min: 110, bpm_max: 130 } });
+check("music search", r.content[0].text.startsWith("click-test |"), r.content[0].text);
+r = await client.callTool({ name: "ae_music", arguments: { action: "use", id: "click-test", comp: "Main", start: 1 } });
+check("music use adds markers + credit", r.content[0].text.includes("beat markers") && r.content[0].text.includes("CC BY 4.0") && markers.times[0] >= 1, r.content[0].text);
+r = await client.callTool({ name: "ae_guide", arguments: { topic: "music" } });
+check("music + inspiration guides", r.content[0].text.startsWith("# Music library"));
 r = await client.callTool({ name: "ae_memory", arguments: { action: "delete", kind: "style", match: "#FF6A3D" } });
 check("memory delete line", r.content[0].text.includes("Removed 1"));
 fs.writeFileSync(path.join(HOME, ".ae-claude-bridge.json"), JSON.stringify({ port: mock.address().port, token: "wrong" }));
