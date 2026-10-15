@@ -3,3 +3,5 @@ server/dist/
 *.mcpb
 .DS_Store
 Thumbs.db
+
+!install/after-effects-mcp-pro.mcpb

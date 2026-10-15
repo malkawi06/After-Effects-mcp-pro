@@ -31,7 +31,7 @@
 
 1. شغّل `install\install-windows.ps1`.
 2. من After Effects روح على Preferences ← Scripting & Expressions وفعّل **Allow Scripts to Write Files and Access Network**، وبعدين اعمل restart للبرنامج.
-3. ثبّت `after-effects-mcp-pro.mcpb` من صفحة Releases بـ Claude Desktop (Settings ← Extensions).
+3. نزّل [`after-effects-mcp-pro.mcpb`](https://github.com/malkawi06/After-Effects-mcp-pro/raw/main/install/after-effects-mcp-pro.mcpb) من مجلد `install` وثبّته بـ Claude Desktop (Settings ← Extensions).
 4. اختياري: ضيف `skill/SKILL.md` كـ skill.
 
 ## التشغيل كل مرة

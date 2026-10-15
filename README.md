@@ -126,7 +126,7 @@ How it stays lean:
 
    The installer copies the panel to your user CEP extensions folder and enables `PlayerDebugMode`, which unsigned panels need.
 2. **After Effects**: go to Preferences → Scripting & Expressions and tick **Allow Scripts to Write Files and Access Network**. Restart AE. Under **Window → Extensions → Claude Bridge** you should see a green dot.
-3. **Claude Desktop**: download `after-effects-mcp-pro.mcpb` from [Releases](https://github.com/malkawi06/After-Effects-mcp-pro/releases), then go to Settings → Extensions → Install Extension and choose it. It runs on Claude Desktop's built-in Node, so there is nothing else to install.
+3. **Claude Desktop**: download [`after-effects-mcp-pro.mcpb`](https://github.com/malkawi06/After-Effects-mcp-pro/raw/main/install/after-effects-mcp-pro.mcpb) (in the `install` folder), then go to Settings → Extensions → Install Extension and choose it. It runs on Claude Desktop's built-in Node, so there is nothing else to install.
 4. **Optional:** add [`skill/SKILL.md`](skill/SKILL.md) as a Claude skill. It holds the workflow and the senior motion-design rules for timing, easing, layout, type, colour and sound levels.
 
 ## Try it
