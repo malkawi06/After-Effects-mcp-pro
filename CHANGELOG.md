@@ -1,6 +1,7 @@
 # Changelog
 
 ## 1.3.1
+- Workflow: a brief step comes first. Claude asks about purpose, audience, format, message, mood, brand, assets, music and references before searching for inspiration.
 - `ae_music add` takes `url`: the server downloads the track itself (https on pixabay.com, freemusicarchive.org or incompetech.com only, audio files only, ≤ 60 MB). The license is checked before downloading. Browser downloads are no longer needed.
 
 ## 1.3.0

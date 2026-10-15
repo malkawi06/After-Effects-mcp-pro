@@ -9,7 +9,7 @@ Agreed with the project owner (Mohammad Malkawi), October 2026.
 ## How the tool behaves
 - **Activates by itself** for any After Effects, motion or video request. The skill has broad Arabic and English triggers, and the core workflow rules live in the MCP server instructions, which every session receives. (Skill loading is decided by the model, so it cannot be guaranteed; the server rules always apply.)
 - **Workflow for every project**
-  1. Brief.
+  1. **Brief first:** ask the client about the video (purpose, audience, format, message, mood, brand, assets, music, references) before any research.
   2. **Inspiration (automatic):** 3–5 references from prompt-motion.com, Motionographer, Vimeo Staff Picks, Dribbble and Behance (motion), plus technique cards learned earlier.
   3. **Written plan with timing:** scenes, copy, rhythm, the chosen music, and which idea came from which reference.
   4. **Styleframes** rendered in After Effects.

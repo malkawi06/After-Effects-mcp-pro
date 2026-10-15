@@ -17,8 +17,9 @@ Use this for **every** After Effects, motion, animation or video request, in Ara
 - If `ae_status` fails: tell the user to open After Effects → Window > Extensions > Claude Bridge (green dot). If raw ExtendScript is blocked, ask them to tick the checkbox in the panel.
 
 ## Workflow for a new piece (agreed with the user, always in this order)
+0. **Brief first, before any research.** Ask the user in one short batch (skip what they already said): what the video is for, audience, platform/format/length, message and copy, mood, brand (colours, fonts, logo), assets they have (footage, screenshots, recordings), music taste, references they like or hate. The answers decide what to search for.
 1. `ae_status`, then:
-   - **Inspiration:** `ae_memory search` for cards learned earlier, then `ae_guide inspiration` and study 3–5 references. Save new technique cards.
+   - **Inspiration (aimed at the brief):** `ae_memory search` for cards learned earlier, then `ae_guide inspiration` and study 3–5 references. Save new technique cards.
    - **Music:** `ae_music search`. If nothing fits, `ae_guide music`, find a royalty-free track, check the license, `ae_music add`.
 2. **Written plan with timing:** scenes (seconds and frames), copy, rhythm, music (and why), and which idea came from which reference (name + URL).
 3. **Styleframes:** build the key frame of each scene in AE and show them with `ae_preview`.

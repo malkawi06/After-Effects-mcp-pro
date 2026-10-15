@@ -2,6 +2,9 @@
 
 Goal: before planning a new piece, study 3–5 strong references to learn **ideas and techniques**: structure, rhythm, transitions, type treatment, colour logic. Never reproduce a specific design, logo, character or footage.
 
+## 0. Brief first
+Never browse before you have the brief (purpose, audience, format/length, message, mood, brand, assets, music, liked/hated references). Search with the brief's words, not generic ones.
+
 ## 1. Recall first (cheap)
 `ae_memory search {query: "<brief keywords>"}` → reuse technique cards learned before. If 3+ relevant cards exist, you may skip browsing unless the brief is new territory.
 

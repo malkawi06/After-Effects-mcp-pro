@@ -375,7 +375,9 @@ function tts({ text: t, voice, rate, ssml, out }) {
 // ---------------- MCP server ----------------
 const INSTRUCTIONS = `Controls a live Adobe After Effects session through the Claude Bridge panel. Use these tools for ANY After Effects,
 motion-graphics, animation or video request (also Arabic: افتر افكتس، موشن، انيميشن، مقطع، فيديو، مونتاج).
-New piece, always in this order: (1) inspiration: ae_guide inspiration, find 3-5 references, save what you learn as
+New piece, always in this order: (0) brief: before any research, ask the user (in one short batch) what the video is for,
+audience, platform/format/length, message and copy, mood, brand (colours, fonts, logo), assets they have, music taste,
+references they like or hate; skip what they already said; (1) inspiration aimed at that brief: ae_guide inspiration, find 3-5 references, save what you learn as
 ae_memory technique cards (automatic), and ae_memory search for cards learned earlier; (2) music: ae_music search
 (ae_guide music to add tracks; royalty-free, license checked); (3) a written plan with timing (scenes, copy, rhythm, music,
 which idea came from which reference); (4) styleframes: build key frames in AE and show them with ae_preview; (5) WAIT for
