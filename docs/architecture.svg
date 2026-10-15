@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="960" height="420" rx="14" fill="#0f1218"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#8a93a6"/>
+    </marker>
+  </defs>
+  <g font-size="13" fill="#e8ebf2">
+    <!-- Claude -->
+    <rect x="30" y="140" width="170" height="110" rx="10" fill="#1b2130" stroke="#3a4560"/>
+    <text x="115" y="178" text-anchor="middle" font-weight="700" font-size="15">Claude</text>
+    <text x="115" y="200" text-anchor="middle" fill="#a9b2c5">Desktop / Code /</text>
+    <text x="115" y="218" text-anchor="middle" fill="#a9b2c5">any MCP client</text>
+
+    <!-- MCP server -->
+    <rect x="280" y="110" width="200" height="170" rx="10" fill="#1b2130" stroke="#ff6a3d"/>
+    <text x="380" y="140" text-anchor="middle" font-weight="700" font-size="15">MCP server (Node)</text>
+    <text x="380" y="162" text-anchor="middle" fill="#a9b2c5">10 tools</text>
+    <text x="380" y="186" text-anchor="middle" fill="#a9b2c5">frame analysis · contact</text>
+    <text x="380" y="204" text-anchor="middle" fill="#a9b2c5">sheets · WAV envelopes</text>
+    <text x="380" y="228" text-anchor="middle" fill="#a9b2c5">render jobs · TTS</text>
+    <text x="380" y="252" text-anchor="middle" fill="#a9b2c5">opt-in knowledge</text>
+
+    <!-- CEP panel -->
+    <rect x="560" y="110" width="170" height="170" rx="10" fill="#1b2130" stroke="#3a4560"/>
+    <text x="645" y="140" text-anchor="middle" font-weight="700" font-size="15">Claude Bridge</text>
+    <text x="645" y="160" text-anchor="middle" fill="#a9b2c5">CEP panel in AE</text>
+    <text x="645" y="190" text-anchor="middle" fill="#a9b2c5">127.0.0.1 HTTP</text>
+    <text x="645" y="208" text-anchor="middle" fill="#a9b2c5">+ secret token</text>
+    <text x="645" y="232" text-anchor="middle" fill="#a9b2c5">call log · raw-code</text>
+    <text x="645" y="250" text-anchor="middle" fill="#a9b2c5">kill switch</text>
+
+    <!-- ExtendScript -->
+    <rect x="790" y="110" width="150" height="170" rx="10" fill="#1b2130" stroke="#3a4560"/>
+    <text x="865" y="140" text-anchor="middle" font-weight="700" font-size="15">ExtendScript</text>
+    <text x="865" y="168" text-anchor="middle" fill="#a9b2c5">AEH motion</text>
+    <text x="865" y="186" text-anchor="middle" fill="#a9b2c5">library</text>
+    <text x="865" y="214" text-anchor="middle" fill="#a9b2c5">After Effects</text>
+    <text x="865" y="232" text-anchor="middle" fill="#a9b2c5">DOM</text>
+
+    <!-- arrows -->
+    <line x1="200" y1="195" x2="278" y2="195" stroke="#8a93a6" stroke-width="2" marker-end="url(#a)" marker-start="url(#a)"/>
+    <text x="239" y="185" text-anchor="middle" font-size="11" fill="#8a93a6">stdio</text>
+    <line x1="480" y1="195" x2="558" y2="195" stroke="#8a93a6" stroke-width="2" marker-end="url(#a)" marker-start="url(#a)"/>
+    <text x="519" y="185" text-anchor="middle" font-size="11" fill="#8a93a6">HTTP</text>
+    <line x1="730" y1="195" x2="788" y2="195" stroke="#8a93a6" stroke-width="2" marker-end="url(#a)" marker-start="url(#a)"/>
+    <text x="759" y="185" text-anchor="middle" font-size="11" fill="#8a93a6">evalScript</text>
+
+    <!-- side services -->
+    <rect x="280" y="320" width="95" height="60" rx="8" fill="#151a24" stroke="#2c3446"/>
+    <text x="327" y="346" text-anchor="middle" font-size="12">aerender</text>
+    <text x="327" y="364" text-anchor="middle" font-size="11" fill="#8a93a6">background MP4</text>
+    <rect x="385" y="320" width="95" height="60" rx="8" fill="#151a24" stroke="#2c3446"/>
+    <text x="432" y="346" text-anchor="middle" font-size="12">OS voices</text>
+    <text x="432" y="364" text-anchor="middle" font-size="11" fill="#8a93a6">SAPI / say</text>
+    <line x1="327" y1="282" x2="327" y2="318" stroke="#8a93a6" stroke-width="1.5" marker-end="url(#a)"/>
+    <line x1="432" y1="282" x2="432" y2="318" stroke="#8a93a6" stroke-width="1.5" marker-end="url(#a)"/>
+    <rect x="280" y="30" width="200" height="50" rx="8" fill="#151a24" stroke="#2c3446"/>
+    <text x="380" y="52" text-anchor="middle" font-size="12">Documents/AE-Claude/knowledge</text>
+    <text x="380" y="69" text-anchor="middle" font-size="11" fill="#8a93a6">lessons · style · recipes (opt-in)</text>
+    <line x1="380" y1="82" x2="380" y2="108" stroke="#8a93a6" stroke-width="1.5" marker-end="url(#a)" marker-start="url(#a)"/>
+  </g>
+</svg>
