@@ -32,7 +32,7 @@ Most After Effects MCP servers expose a fixed list of commands, such as "create 
 ![Architecture](docs/architecture.svg)
 
 1. A **CEP panel** called *Claude Bridge* runs inside After Effects. It listens on `127.0.0.1` with a secret token, logs every call, and has a switch that turns off raw code execution.
-2. An **MCP server** (Node, packaged as a one-click Claude Desktop extension) exposes 12 tools. It handles the heavy lifting outside AE: frame analysis, contact sheets, WAV envelopes, background renders and TTS.
+2. An **MCP server** (Node, packaged as a one-click Claude Desktop extension) exposes 13 tools. It handles the heavy lifting outside AE: frame analysis, contact sheets, WAV envelopes, background renders and TTS.
 3. Claude's code runs in AE's ExtendScript engine, with **AEH**, a motion-design library that turns a page of boilerplate into one line.
 
 ## Tools
@@ -49,7 +49,8 @@ Most After Effects MCP servers expose a fixed list of commands, such as "create 
 | `ae_guide` | Loads one expert cookbook on demand: transitions, typography, camera-3d, audio-sync, expressions, deliver, reference |
 | `ae_render` / `ae_render_status` | Background H.264 render via `aerender`, with progress |
 | `ae_tts` | Generates a voice-over WAV with Windows SAPI or macOS `say` voices |
-| `ae_memory` | **Opt-in** saved lessons, style notes and reusable recipes. Claude saves only when you ask |
+| `ae_music` | Royalty-free **music library**: adds downloaded tracks after a license check, measures BPM/beats/energy, finds the right track for a brief, drops beat markers |
+| `ae_memory` | **Technique cards** learned from references (saved automatically, you can delete them), lessons and recipes; your personal style only when you ask |
 
 ### The visual review
 
