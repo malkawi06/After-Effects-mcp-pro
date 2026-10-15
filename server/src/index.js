@@ -231,7 +231,7 @@ function analyseBeats(a) {
 }
 // RMS per timeline bin for audio layers ([{file,startTime,inPoint,outPoint,levels}]); returns {env, notes}.
 async function audioEnvelope(layers, duration, bins) {
-  const env = new Float32Array(bins), notes = [];
+  const env = new Float32Array(bins), notes = [], peaks = [];
   for (const L of layers) {
     let w; try { w = await decodeAudio(L.file); } catch (e) { notes.push(`${L.name}: ${e.message}`); continue; }
     const gain = Math.pow(10, (Math.max(...(L.levels || [0])) || 0) / 20);
@@ -248,8 +248,9 @@ async function audioEnvelope(layers, duration, bins) {
       if (rms > peakV) { peakV = rms; peakT = (t0 + t1) / 2; }
     }
     notes.push(`${L.name}: starts ${L.startTime.toFixed(2)}s, loudest around ${peakT.toFixed(2)}s`);
+    peaks.push({ name: L.name, t: peakT, start: L.inPoint, short: L.outPoint - L.inPoint < 3 });
   }
-  return { env, notes };
+  return { env, notes, peaks };
 }
 
 // Timeline strip under the sheet: motion (orange), keyframes (white), audio (cyan), 1 s grid.
@@ -547,7 +548,10 @@ server.registerTool("ae_review", {
     const a = await analyseFrames(files, width ?? (n > 9 ? 320 : 400), 4);
     const pixelFlags = [];
     a.thumbs.forEach((t, i) => frameFlags(t).forEach((f) => pixelFlags.push(`${times[i]}s: ${f}`)));
-    const { env, notes } = await audioEnvelope(audit.audio, dur, a.sheet.W);
+    const { env, notes, peaks } = await audioEnvelope(audit.audio, dur, a.sheet.W);
+    // a short sound effect should land on something that moves: a keyframe near its start or its peak
+    const near = (t) => audit.keyTimes.some((k) => Math.abs(k - t) <= 0.2);
+    const sync = peaks.filter((pk) => pk.short && !near(pk.t) && !near(pk.start)).map((pk) => `sound "${pk.name}" at ${pk.t.toFixed(2)}s has no visual hit (no keyframe within 0.2s)`);
     const strip = drawStrip(a.sheet.W, dur, { energies: a.energies, sampleTimes: times, keyTimes: audit.keyTimes, env: audit.audio.length ? env : null });
     const img = stack(a.sheet.data, a.sheet.H, strip.data, strip.H, a.sheet.W);
     const report = [
@@ -555,7 +559,7 @@ server.registerTool("ae_review", {
       `Motion: ${motionSummary(times, a.energies, a.thumbs) || "n/a"}`,
       `Keyframes: ${audit.keyTimes.length} (${[...new Set(audit.keyTimes)].sort((x, y) => x - y).slice(0, 30).join(", ")}${audit.keyTimes.length > 30 ? " …" : ""})`,
       notes.length ? `Audio: ${notes.join("; ")}` : "Audio: none",
-      `Checks: ${[...audit.issues, ...pixelFlags].join(" | ") || "no issues found"}`,
+      `Checks: ${[...audit.issues, ...sync, ...pixelFlags].join(" | ") || "no issues found"}`,
     ].join("\n");
     return { content: [{ type: "image", data: toJpeg(img.data, a.sheet.W, img.H), mimeType: "image/jpeg" }, { type: "text", text: report }] };
   } finally {

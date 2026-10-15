@@ -217,7 +217,10 @@ var AEH = AEH || {};
         if (o.justify === "left") td.justification = ParagraphJustification.LEFT_JUSTIFY;
         if (o.justify === "right") td.justification = ParagraphJustification.RIGHT_JUSTIFY;
         tp.setValue(td);
+        // A font used for the first time can measure 0 until AE has loaded it: retry, then fall back to an estimate.
         var r = l.sourceRectAtTime(0, false), tr = l.property("ADBE Transform Group");
+        for (var tries = 0; r.width === 0 && tries < 4; tries++) { $.sleep(80); tp.setValue(td); r = l.sourceRectAtTime(0, false); }
+        if (r.width === 0) r = { left: 0, top: -td.fontSize * 0.7, width: 0, height: td.fontSize * 0.7 };
         tr.property("ADBE Anchor Point").setValue([r.left + r.width / 2, r.top + r.height / 2]);
         tr.property("ADBE Position").setValue(o.pos || [comp.width / 2, comp.height / 2]);
         if (o.name) l.name = o.name;
@@ -322,12 +325,19 @@ var AEH = AEH || {};
     AEH.fx = function (layer, matchName, params) {
         var e = layer.property("ADBE Effect Parade").addProperty(matchName);
         if (!e) throw new Error("Effect not available: " + matchName);
-        for (var k in params) if (params.hasOwnProperty(k)) {
-            var p = e.property(k);
-            if (!p) throw new Error("Effect " + matchName + " has no param " + k);
-            p.setValue(params[k]);
-        }
+        for (var k in params) if (params.hasOwnProperty(k)) AEH.fxParam(e, k).setValue(params[k]);
         return e;
+    };
+    // Effect parameters are a flat list; group headers ("Transform", "Sub Settings") and some duplicate
+    // names (Fractal Noise "Random Seed") are NO_VALUE markers. Return the first settable match.
+    AEH.fxParam = function (effect, key) {
+        var names = [];
+        for (var i = 1; i <= effect.numProperties; i++) {
+            var p = effect.property(i);
+            if ((p.name === key || p.matchName === key) && p.propertyValueType !== PropertyValueType.NO_VALUE) return p;
+            if (p.propertyValueType !== PropertyValueType.NO_VALUE && p.name) names.push(p.name);
+        }
+        throw new Error(effect.matchName + " has no settable param '" + key + "'. Params: " + names.join(", "));
     };
     AEH.precompose = function (comp, layerIndices, name) { return comp.layers.precompose(layerIndices, name, true); };
     // Offset layers' timing by `frames` each, starting at `start` seconds (cascading entrances).
@@ -407,6 +417,43 @@ var AEH = AEH || {};
         return o;
     }
 
+    // Title-safe check from real layer bounds: a temporary Point Control evaluates toComp() of the layer's
+    // source rect (handles parenting, scale, rotation). Flags text/graphics that sit, at rest, partly outside
+    // the 5% margin. Layers moving in or out (box still changing) and fully off-screen layers are ignored.
+    function safeArea(c, issues) {
+        var mx = c.width * 0.05, my = c.height * 0.05, n = 12, flagged = {};
+        for (var i = 1; i <= c.numLayers; i++) {
+            var l = c.layer(i);
+            if (!l.enabled || !l.hasVideo || l.adjustmentLayer || l.nullLayer || l instanceof CameraLayer || l instanceof LightLayer) continue;
+            var fxg = l.property("ADBE Effect Parade");
+            if (!fxg) continue;
+            var a = fxg.addProperty("ADBE Point Control"), b = fxg.addProperty("ADBE Point Control");
+            var pre = "var r=sourceRectAtTime(time,false),p=[toComp([r.left,r.top]),toComp([r.left+r.width,r.top]),toComp([r.left,r.top+r.height]),toComp([r.left+r.width,r.top+r.height])];";
+            a = fxg.property(fxg.numProperties - 1); b = fxg.property(fxg.numProperties);
+            a.property(1).expression = pre + "[Math.min(p[0][0],p[1][0],p[2][0],p[3][0]),Math.min(p[0][1],p[1][1],p[2][1],p[3][1])]";
+            b.property(1).expression = pre + "[Math.max(p[0][0],p[1][0],p[2][0],p[3][0]),Math.max(p[0][1],p[1][1],p[2][1],p[3][1])]";
+            try {
+                for (var s = 0; s < n && !flagged[l.name]; s++) {
+                    var t = (s + 0.5) * c.duration / n;
+                    if (t < l.inPoint || t >= l.outPoint) continue;
+                    if (l.property("ADBE Transform Group").property("ADBE Opacity").valueAtTime(t, false) < 5) continue;
+                    var lo = a.property(1).valueAtTime(t, false), hi = b.property(1).valueAtTime(t, false);
+                    var lo2 = a.property(1).valueAtTime(t + 0.1, false), hi2 = b.property(1).valueAtTime(t + 0.1, false);
+                    var w = hi[0] - lo[0], h = hi[1] - lo[1];
+                    if (w <= 1 || h <= 1 || (w > c.width * 0.95 && h > c.height * 0.95)) continue;            // empty or full-frame
+                    if (hi[0] < 0 || lo[0] > c.width || hi[1] < 0 || lo[1] > c.height) continue;                 // fully off-screen
+                    if (Math.abs(lo2[0] - lo[0]) + Math.abs(lo2[1] - lo[1]) + Math.abs(hi2[0] - hi[0]) + Math.abs(hi2[1] - hi[1]) > 4) continue; // still moving
+                    var sides = [];
+                    if (lo[0] < mx) sides.push("left"); if (hi[0] > c.width - mx) sides.push("right");
+                    if (lo[1] < my) sides.push("top"); if (hi[1] > c.height - my) sides.push("bottom");
+                    if (sides.length) { flagged[l.name] = 1; issues.push(l.name + ": outside title-safe (" + sides.join(", ") + ") at " + (Math.round(t * 100) / 100) + "s"); }
+                }
+            } catch (e) {}
+            fxg.property(fxg.numProperties).remove();      // removing one invalidates the other reference:
+            fxg.property(fxg.numProperties).remove();      // always remove by index
+        }
+    }
+
     // ---------- dispatcher functions ----------
     var fns = {
         status: function () {
@@ -450,6 +497,8 @@ var AEH = AEH || {};
         },
         // Expert checks on a comp + timing data (key times, audio files) for the visual review strip.
         audit: function (args) {
+            var SPATIAL = { "ADBE Position": 1, "ADBE Position_0": 1, "ADBE Position_1": 1, "ADBE Position_2": 1, "ADBE Anchor Point": 1,
+                "ADBE Scale": 1, "ADBE Rotate Z": 1, "ADBE Rotate X": 1, "ADBE Rotate Y": 1, "ADBE Orientation": 1 };
             var c = AEH.comp(args.comp), issues = [], keyTimes = [], audio = [], moving = 0, linear = 0;
             function scan(group, layer, depth) {
                 if (depth > 12) return;
@@ -475,8 +524,11 @@ var AEH = AEH || {};
                 var l = c.layer(i);
                 if (!l.enabled && !l.hasAudio) continue;
                 scan(l, l, 0);
+                // Only spatial animation needs motion blur; opacity fades and nulls don't.
                 var tg = l.property("ADBE Transform Group"), movesThis = false;
-                if (tg) for (var j = 1; j <= tg.numProperties; j++) { try { if (tg.property(j).numKeys > 1) movesThis = true; } catch (e) {} }
+                if (tg && !l.nullLayer) for (var j = 1; j <= tg.numProperties; j++) {
+                    try { var tpj = tg.property(j); if (tpj.numKeys > 1 && SPATIAL[tpj.matchName]) movesThis = true; } catch (e) {}
+                }
                 if (movesThis && l.hasVideo && !l.motionBlur) issues.push(l.name + ": moves but layer motion blur is off");
                 if (l.inPoint >= c.duration || l.outPoint <= 0) issues.push(l.name + ": entirely outside the comp's time range");
                 if (l.source && l.source.footageMissing) issues.push(l.name + ": footage missing");
@@ -485,6 +537,7 @@ var AEH = AEH || {};
                                  levels: l.property("ADBE Audio Group").property("ADBE Audio Levels").value });
                 if (movesThis) moving++;
             }
+            safeArea(c, issues);
             if (moving && !c.motionBlur) issues.push("Comp motion blur switch is off while layers move");
             if (linear) issues.push(linear + " linear keyframe segment(s) — ease them unless the motion is meant to be mechanical");
             if (!c.numLayers) issues.push("Comp is empty");
