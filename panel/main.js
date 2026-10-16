@@ -13,8 +13,8 @@
 
   var $ = function (id) { return document.getElementById(id); };
   // A stale index.html (older install) may lack a switch: fall back to a safe default instead of crashing.
-  var allowRaw = $("allowRaw") || { checked: true };
-  try { allowRaw.checked = localStorage.getItem("allowRaw") !== "0"; } catch (e) { allowRaw.checked = true; }
+  var allowRaw = $("allowRaw") || { checked: false };   // raw ExtendScript is OFF until the user turns it on
+  try { allowRaw.checked = localStorage.getItem("allowRaw") === "1"; } catch (e) { allowRaw.checked = false; }
   allowRaw.onchange = function () { try { localStorage.setItem("allowRaw", allowRaw.checked ? "1" : "0"); } catch (e) {} };
   var readOnly = $("readOnly") || { checked: false };
   try { readOnly.checked = localStorage.getItem("readOnly") === "1"; } catch (e) {}

@@ -1,6 +1,9 @@
 # Changelog
 
 ## 1.6.0
+Security:
+- Raw ExtendScript (`ae_run_jsx`) is off by default in the panel; the user turns it on explicitly.
+- Render and output paths must be inside `Documents/AE-Claude`; other files are never overwritten.
 Lessons from building the CONTROL THE MOTION promo (56 s, 1080p60) entirely through the tool.
 - `ae_music`: SFX `motion` filter (transition, impact, reveal, ui) and a default level per motion type (impact -10, transition -12, reveal -14, ui -16 dB).
 - `ae_music`: SFX library. `sfx: true` (automatic under 2 s) stores the sound's hit point (loudest 10 ms window); `use` places that hit exactly on `start`. Tag by motion type (whoosh, impact, riser, click…).

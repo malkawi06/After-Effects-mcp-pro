@@ -61,7 +61,9 @@ function checkOut(p, ext) {
   if (p == null) return p;
   if (!path.isAbsolute(p) || path.normalize(p) !== path.resolve(p) || path.extname(p).toLowerCase() !== ext)
     throw new Error(`Output path must be an absolute ${ext} path`);
-  return path.resolve(p);
+  const r = path.resolve(p), rel = path.relative(WORK_DIR, r);   // outputs only inside Documents/AE-Claude: never overwrite other files
+  if (rel.startsWith("..") || path.isAbsolute(rel)) throw new Error(`Output must be inside ${WORK_DIR}`);
+  return r;
 }
 
 // Structured log (JSON lines, no arguments or project content): Documents/AE-Claude/logs/server.jsonl, rotated at 1 MB.

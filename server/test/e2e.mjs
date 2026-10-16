@@ -101,7 +101,10 @@ check("render done", job.status === "done" && job.progress === "3/3 frames" && f
 check("render output verified (fake file is not an MP4)", /not a valid MP4/.test(job.verified || ""), r.content[0].text);
 r = await client.callTool({ name: "ae_render", arguments: { output: "relative/out.mp4", wait_seconds: 0 } });
 check("render rejects relative output path", r.isError && /absolute \.mp4/.test(r.content[0].text), r.content[0].text);
-r = await client.callTool({ name: "ae_render", arguments: { output: path.join(HOME, "slow.mp4"), wait_seconds: 0 } });
+r = await client.callTool({ name: "ae_render", arguments: { output: path.join(HOME, "outside.mp4"), wait_seconds: 0 } });
+check("render rejects output outside Documents/AE-Claude", r.isError && /inside/.test(r.content[0].text), r.content[0].text);
+fs.mkdirSync(path.join(HOME, "Documents/AE-Claude"), { recursive: true });
+r = await client.callTool({ name: "ae_render", arguments: { output: path.join(HOME, "Documents/AE-Claude/slow.mp4"), wait_seconds: 0 } });
 { const j2 = JSON.parse(r.content[0].text);
   r = await client.callTool({ name: "ae_render_status", arguments: { job_id: j2.job_id, cancel: true } });
   check("render cancel", JSON.parse(r.content[0].text).status === "cancelled", r.content[0].text); }
