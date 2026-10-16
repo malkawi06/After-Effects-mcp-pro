@@ -78,7 +78,7 @@ const errKind = (m) => (/Cannot reach|did not answer|never started|bad token/.te
   : /required|must|not allowed|Unknown|not found|No track|no longer exists|Invalid/i.test(m) ? "validation" : "app");
 
 // ---------------- image helpers (preview) ----------------
-async function waitForFile(file, timeoutMs = 30_000) {
+async function waitForFile(file, timeoutMs = 30_000) {   // heavy frames (3D/DOF, big zooms) can take minutes
   const end = Date.now() + timeoutMs;
   let last = -1;
   while (Date.now() < end) {
@@ -87,7 +87,7 @@ async function waitForFile(file, timeoutMs = 30_000) {
     last = size;
     await sleep(150);
   }
-  throw new Error(`Frame was not written: ${file}`);
+  throw new Error(`Frame was not written within ${timeoutMs / 1000}s: ${file}. Heavy frame — preview the precomp, fewer times, or check for slow effects (CC Radial Blur at high quality, huge zoom with motion blur).`);
 }
 
 // Bilinear resize of an RGBA PNG onto an RGB canvas, alpha composited over a dark grey.
@@ -214,6 +214,17 @@ async function decodeAudio(file) {
   const r = d.decode(new Uint8Array(fs.readFileSync(file))); d.free();
   const [L, R] = r.channelData;
   return { rate: r.sampleRate, n: r.samplesDecoded, sample: R ? (i) => (L[i] + R[i]) / 2 : (i) => L[i] };
+}
+// Hit point of a short SFX: centre of the loudest 10 ms window (impact transient, whoosh pass, riser peak).
+function hitPoint(d) {
+  const w = Math.max(1, Math.round(d.rate * 0.01));
+  let best = 0, at = 0;
+  for (let i = 0; i + w <= d.n; i += w) {
+    let e = 0;
+    for (let j = i; j < i + w; j++) { const v = d.sample(j); e += v * v; }
+    if (e > best) { best = e; at = i + w / 2; }
+  }
+  return +(at / d.rate).toFixed(3);
 }
 // Beat grid + rhythm per audio file, cached by path/size/mtime (decoding a 3-min MP3 costs ~1 s).
 const rhythmCache = new Map();
@@ -527,7 +538,7 @@ server.registerTool("ae_preview", {
   const dir = path.join(os.tmpdir(), "ae-claude", `prev-${Date.now()}`);
   const res = await bridge("frames", { comp, times: ts, dir });
   try {
-    for (const f of res.frames) await waitForFile(f.file);
+    for (const f of res.frames) await waitForFile(f.file, 120_000);
     const sheet = contactSheet(res.frames.map((f) => f.file), width ?? (res.frames.length === 1 ? 1024 : 480));
     return { content: [
       { type: "image", data: Buffer.from(sheet.jpeg).toString("base64"), mimeType: "image/jpeg" },
@@ -833,7 +844,7 @@ async function downloadTrack(url) {
 }
 
 server.registerTool("ae_music", {
-  description: "Music library (ae_guide music). add: url (direct audio file) or path, license + source page required. search. use: import + beat markers.",
+  description: "Music + SFX library (ae_guide music). add: url (direct audio file) or path, license + source page required; sfx=true (auto for < 2 s) stores the sound's hit point. search. use: music → import + beat markers; sfx → its hit lands exactly on start.",
   inputSchema: {
     action: z.enum(["add", "search", "use", "list", "remove"]),
     url: z.string().optional(), path: z.string().optional(), title: z.string().optional(), artist: z.string().optional(),
@@ -841,20 +852,30 @@ server.registerTool("ae_music", {
     query: z.string().optional(), bpm_min: z.number().optional(), bpm_max: z.number().optional(),
     min_seconds: z.number().optional(), energy: z.enum(["low", "mid", "high"]).optional(),
     id: z.string().optional(), comp: z.string().optional(), start: z.number().optional(), db: z.number().optional(), markers: z.boolean().optional(),
+    sfx: z.boolean().optional().describe("add: short sound effect (whoosh/impact/riser/click), tag it by motion type"),
     offset: z.number().optional().describe("seconds into the track"), drop_at: z.number().optional().describe("comp time the first drop lands on"),
   },
 }, tool(async (a) => {
   const ix = loadIndex();
-  if (a.action === "list") return text(ix.map((t) => `${t.id} | ${t.title} — ${t.artist} | ${t.bpm} BPM ${t.duration}s ${t.energy} | ${t.tags.join(", ")} | ${t.license}`).join("\n") || "(empty)");
+  const line = (t) => t.kind === "sfx" ? `${t.id} | SFX ${t.duration}s hit@${t.hit}s | ${t.tags.join(", ")}` : `${t.id} | ${t.bpm} BPM ${t.duration}s ${t.energy} | curve ${t.curve.join(" ")} | ${t.tags.join(", ")}`;
+  if (a.action === "list") return text(ix.map((t) => `${line(t)} | ${t.license}`).join("\n") || "(empty)");
   if (a.action === "add") {
     if (!a.license || !a.source) throw new Error("license and source are required");
     if (BLOCKED_LICENSE.test(a.license)) throw new Error(`License "${a.license}" is not allowed (non-commercial or no-derivatives).`);
     if (a.url) a.path = await downloadTrack(a.url);
     if (!a.path || !fs.existsSync(a.path)) throw new Error("url (direct audio file) or path to a downloaded wav/mp3 is required");
-    const dec = await decodeAudio(a.path), b = analyseBeats(dec), prof = musicProfile(dec), rh = analyseRhythm(dec, b);
+    const dec = await decodeAudio(a.path), dur = dec.n / dec.rate;
     const id = safeName(`${a.title || path.basename(a.path, path.extname(a.path))}`).slice(0, 48);
-    const dest = path.join(MUSIC_DIR, "tracks", id + path.extname(a.path).toLowerCase());
+    const sfx = a.sfx || dur < 2;
+    const dest = path.join(MUSIC_DIR, sfx ? "sfx" : "tracks", id + path.extname(a.path).toLowerCase());
     fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.copyFileSync(a.path, dest);
+    if (sfx) {
+      const rec = { id, kind: "sfx", title: a.title || id, artist: a.artist || "unknown", file: dest, source: a.source, license: a.license,
+        tags: (a.tags || []).map((t) => t.toLowerCase()), duration: +dur.toFixed(3), hit: hitPoint(dec), added: new Date().toISOString().slice(0, 10) };
+      saveIndex([...ix.filter((t) => t.id !== id), rec]);
+      return text(`Added SFX ${id}: ${rec.duration}s, hit at ${rec.hit}s. Use: ae_music use id=${id} start=<comp time of the visual hit>.`);
+    }
+    const b = analyseBeats(dec), prof = musicProfile(dec), rh = analyseRhythm(dec, b);
     const rec = { id, title: a.title || id, artist: a.artist || "unknown", file: dest, source: a.source, license: a.license, tags: (a.tags || []).map((t) => t.toLowerCase()),
       bpm: b.bpm, duration: b.duration, beats: b.beats, rhythm: rh, ...prof, added: new Date().toISOString().slice(0, 10) };
     saveIndex([...ix.filter((t) => t.id !== id), rec]);
@@ -866,12 +887,18 @@ server.registerTool("ae_music", {
       (a.min_seconds == null || t.duration >= a.min_seconds) && (!a.energy || t.energy === a.energy))
       .map((t) => [q.reduce((sc, w) => sc + (t.tags.some((g) => g.includes(w)) ? 2 : 0) + (t.title.toLowerCase().includes(w) ? 1 : 0), 0), t])
       .filter(([sc]) => !q.length || sc > 0).sort((x, y) => y[0] - x[0]).slice(0, 6);
-    return text(res.map(([, t]) => `${t.id} | ${t.bpm} BPM ${t.duration}s ${t.energy} | curve ${t.curve.join(" ")} | ${t.tags.join(", ")}`).join("\n") ||
+    return text(res.map(([, t]) => line(t)).join("\n") ||
       "(no match — find one with ae_guide music, then ae_music add)");
   }
   const t = ix.find((x) => x.id === a.id);
   if (!t) throw new Error(`No track ${a.id}`);
   if (a.action === "remove") { saveIndex(ix.filter((x) => x.id !== a.id)); fs.rmSync(t.file, { force: true }); return text(`Removed ${a.id}.`); }
+  if (t.kind === "sfx") {   // the sound's hit (peak) lands on start
+    const st = (a.start || 0) - t.hit, file = t.file.replace(/\\/g, "/");
+    const r = await bridge("runJsx", { code: `var c = AEH.comp(${JSON.stringify(a.comp || "")}); var l = AEH.audio(c, ${JSON.stringify(file)}, 0, ${a.db ?? -12});
+      l.startTime = ${st}; l.inPoint = Math.max(0, ${st}); l.name = ${JSON.stringify(`SFX ${t.id} @${(a.start || 0).toFixed(2)}`)}; ({ comp: c.name, layer: l.name })`, undoName: "Add SFX" });
+    return text(`${r.layer} on ${r.comp}: hit at ${a.start || 0}s.`);
+  }
   // use
   if (!t.rhythm) {   // tracks added before 1.4: analyse once and keep it
     const dec = await decodeAudio(t.file), b = analyseBeats(dec);
@@ -903,6 +930,12 @@ server.registerTool("ae_music", {
 const FONT_DIR = process.platform === "win32" ? path.join(process.env.LOCALAPPDATA || os.homedir(), "Microsoft", "Windows", "Fonts")
   : process.platform === "darwin" ? path.join(os.homedir(), "Library", "Fonts") : path.join(os.homedir(), ".local", "share", "fonts");
 const isFont = (b) => b.length > 12 && ([0x00010000, 0x74727565, 0x4f54544f].includes(b.readUInt32BE(0)));   // TrueType, 'true', 'OTTO'
+// Windows: register the files with the running session and broadcast WM_FONTCHANGE, so apps see them without a logout.
+async function loadFontsNow(files) {
+  const list = files.map((f) => `'${f.replace(/'/g, "''")}'`).join(",");
+  const ps = `Add-Type -Namespace W -Name F -MemberDefinition '[DllImport("gdi32.dll")] public static extern int AddFontResource(string p); [DllImport("user32.dll")] public static extern int SendMessageTimeout(System.IntPtr h, uint m, System.IntPtr w, System.IntPtr l, uint f, uint t, out System.IntPtr r);'; foreach($f in @(${list})){[void][W.F]::AddFontResource($f)}; $r=[IntPtr]::Zero; [void][W.F]::SendMessageTimeout([IntPtr]0xffff, 0x1D, [IntPtr]::Zero, [IntPtr]::Zero, 2, 2000, [ref]$r)`;
+  await run("powershell", ["-NoProfile", "-NonInteractive", "-Command", ps]).catch(() => {});   // best effort: files stay installed either way
+}
 async function installFamily(family) {
   const dir = String(family).toLowerCase().replace(/[^a-z0-9]/g, "");
   const res = await fetch(`https://api.github.com/repos/google/fonts/contents/ofl/${dir}`, { headers: { "User-Agent": "ae-mcp-pro" } });
@@ -923,6 +956,7 @@ async function installFamily(family) {
     done.push(f.name);
   }
   if (!done.length) throw new Error(`No .ttf files for "${family}"`);
+  if (process.platform === "win32") await loadFontsNow(done.map((n) => path.join(FONT_DIR, n)));
   return done;
 }
 
