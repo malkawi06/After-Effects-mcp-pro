@@ -1,5 +1,11 @@
 // Smoke-test AEH library code paths against a universal AE DOM stub (catches typos/ReferenceErrors).
 const fs = require("fs");
+// ExtendScript is ES3: future reserved words can't be identifiers (Node accepts them, AE refuses to load the file).
+{ const RES = "abstract|boolean|byte|char|class|const|debugger|double|enum|export|extends|final|float|goto|implements|import|int|interface|long|native|package|private|protected|public|short|static|super|synchronized|throws|transient|volatile";
+  const src = fs.readFileSync(process.argv[2], "utf8").replace(/"(?:[^"\\\n]|\\.)*"/g, '""').replace(/\/\/.*$/gm, "");
+  const bad = src.match(new RegExp(`\\b(?:function|var)\\s+(?:${RES})\\b|[,(]\\s*(?:${RES})\\s*[,)=]|\\.(?:${RES})\\s*\\(`, "g"));
+  console.log(bad ? `FAIL ES3 reserved word used as identifier: ${bad.join(" ")}` : "PASS no ES3 reserved words as identifiers");
+  if (bad) process.exitCode = 1; }
 const calls = [];
 function stub(path) {
   const fn = function () { calls.push(path + "()"); return stub(path + "()"); };

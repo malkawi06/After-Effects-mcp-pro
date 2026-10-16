@@ -470,7 +470,7 @@ var AEH = AEH || {};
 
     // One layer in depth: timing, transform values, keyframes (time, value, interpolation), effects with
     // parameters, text style, expressions and their errors. Capped so a heavy layer can't flood the context.
-    function short(v) {
+    function compactVal(v) {
         if (v instanceof Array) { var a = []; for (var i = 0; i < v.length; i++) a.push(typeof v[i] === "number" ? r3(v[i]) : v[i]); return a; }
         if (typeof v === "number") return r3(v);
         if (v instanceof TextDocument) return v.text;
@@ -484,7 +484,7 @@ var AEH = AEH || {};
         if (!l.enabled) d.enabled = false;
         try { d.blend = String(l.blendingMode).replace("BlendingMode.", ""); d.motionBlur = l.motionBlur; d.threeD = l.threeDLayer; } catch (e) {}
         var tg = l.property("ADBE Transform Group"), tr = {};
-        for (var i = 1; i <= tg.numProperties; i++) { var p = tg.property(i); try { if (p.enabled !== false && !p.isSeparationFollower) tr[p.matchName.replace("ADBE ", "")] = short(p.value); } catch (e) {} }
+        for (var i = 1; i <= tg.numProperties; i++) { var p = tg.property(i); try { if (p.enabled !== false && !p.isSeparationFollower) tr[p.matchName.replace("ADBE ", "")] = compactVal(p.value); } catch (e) {} }
         d.transform = tr;
         var keyed = [], budget = 40;
         (function walk(g, path, depth) {
@@ -497,7 +497,7 @@ var AEH = AEH || {};
                     if (!p.numKeys && !hasExpr) continue;
                     var r = { path: id.substr(1) }, ks = [];
                     for (var k = 1; k <= Math.min(p.numKeys, 12); k++)
-                        ks.push([r3(p.keyTime(k)), short(p.keyValue(k)), interpName(p.keyOutInterpolationType(k))]);
+                        ks.push([r3(p.keyTime(k)), compactVal(p.keyValue(k)), interpName(p.keyOutInterpolationType(k))]);
                     if (ks.length) r.keys = ks;
                     if (p.numKeys > 12) r.moreKeys = p.numKeys - 12;
                     if (hasExpr) { r.expression = p.expression.length > 400 ? p.expression.substr(0, 400) + "…" : p.expression; if (p.expressionError) r.expressionError = p.expressionError; }
@@ -510,7 +510,7 @@ var AEH = AEH || {};
         if (eg) for (var e = 1; e <= eg.numProperties; e++) {
             var ef = eg.property(e), ps = {};
             for (var q = 1, n = 0; q <= ef.numProperties && n < 20; q++) {
-                try { var pq = ef.property(q); if (pq.propertyType === PropertyType.PROPERTY && pq.propertyValueType !== PropertyValueType.NO_VALUE) { ps[pq.name] = short(pq.value); n++; } } catch (er) {}
+                try { var pq = ef.property(q); if (pq.propertyType === PropertyType.PROPERTY && pq.propertyValueType !== PropertyValueType.NO_VALUE) { ps[pq.name] = compactVal(pq.value); n++; } } catch (er) {}
             }
             fx.push({ matchName: ef.matchName, name: ef.name, enabled: ef.enabled, params: ps });
         }
@@ -518,7 +518,7 @@ var AEH = AEH || {};
         if (l instanceof TextLayer) {
             var td = l.property("ADBE Text Properties").property("ADBE Text Document").value;
             d.textStyle = { text: td.text, font: td.font, size: td.fontSize, tracking: td.tracking };
-            try { d.textStyle.fill = short(td.fillColor); d.textStyle.justify = String(td.justification).replace("ParagraphJustification.", ""); } catch (e) {}
+            try { d.textStyle.fill = compactVal(td.fillColor); d.textStyle.justify = String(td.justification).replace("ParagraphJustification.", ""); } catch (e) {}
         }
         var mk = l.property("ADBE Mask Parade"); if (mk && mk.numProperties) d.masks = mk.numProperties;
         if (l.source) { d.source = l.source.name; try { if (l.source.footageMissing) d.missing = true; } catch (e) {} }
