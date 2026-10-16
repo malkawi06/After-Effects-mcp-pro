@@ -2,6 +2,8 @@
 
 # After Effects MCP Pro
 
+[![الإصدار](https://img.shields.io/badge/version-1.6.0-FF5A1F)](CHANGELOG.md) [![الترخيص: MIT](https://img.shields.io/badge/license-MIT-1F2937)](LICENSE) [![MCP](https://img.shields.io/badge/MCP-server-8D1E2D)](https://modelcontextprotocol.io) [![Tests](https://img.shields.io/badge/tests-78%20passing-007A3D)](server/test)
+
 **بيخلّي Claude يشتغل جوّا After Effects كأنه مصمم موشن خبير: بيبني، وبيشوف شو عمل، وبينتقد شغله، وبيعمل render، وكل هاد بأقل عدد توكنز ممكن.**
 
 ![Hello wink](docs/hello-wink.gif)

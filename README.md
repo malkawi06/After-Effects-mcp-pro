@@ -1,5 +1,10 @@
 # After Effects MCP Pro
 
+[![Version](https://img.shields.io/badge/version-1.6.0-FF5A1F)](CHANGELOG.md)
+[![License: MIT](https://img.shields.io/badge/license-MIT-1F2937)](LICENSE)
+[![MCP](https://img.shields.io/badge/MCP-server-8D1E2D)](https://modelcontextprotocol.io)
+[![Tests](https://img.shields.io/badge/tests-78%20passing-007A3D)](server/test)
+
 **Let Claude work inside Adobe After Effects like a senior motion designer. It builds, sees, critiques and renders, and it spends as few tokens as possible doing it.**
 
 ![Hello wink: built by Claude in After Effects](docs/hello-wink.gif)
