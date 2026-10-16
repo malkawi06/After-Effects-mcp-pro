@@ -32,6 +32,16 @@ Most After Effects MCP servers expose a fixed list of commands, such as "create 
 | Transport | Often polled JSON files | **Local HTTP with a secret token**, results returned in the same call |
 | Token cost | Not measured | **Measured and optimised** ([see below](#token-efficiency)) |
 
+## Why people will want it
+
+- **One sentence in, a finished piece out.** Claude builds the layers, keyframes, camera and transitions inside After Effects, and you get a real project you can open and edit.
+- **Music-first.** It reads the beat, marks the drops and breaks, and lands cuts on the beat, with a sound effect on the hits.
+- **It checks its own work.** Frames, timing and audio are reviewed before rendering, and common mistakes are caught with a message that says what to fix.
+- **Arabic-ready.** Right-to-left type, calligraphy, and Google Fonts that load straight into the session.
+- **Safe by default.** Raw code is off until you turn it on, outputs stay in one folder, and every call is logged without its content.
+
+> A short demo video goes here once it is published. Until then, the `hello-wink` clip above is the reference.
+
 ## Quick start
 
 1. Install the extension and the panel ([full guide](docs/SETUP.md)).
