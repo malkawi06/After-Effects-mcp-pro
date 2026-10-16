@@ -386,7 +386,7 @@ function tts({ text: t, voice, rate, ssml, out }) {
 // ---------------- OS helpers: window screenshot, Caps Lock ----------------
 const run = (cmd, args, env = {}) => new Promise((resolve, reject) =>
   execFile(cmd, args, { env: { ...process.env, ...env }, windowsHide: true, timeout: 30_000 },
-    (e, stdout, stderr) => (e ? reject(new Error((stderr || e.message).trim())) : resolve(stdout.trim()))));
+    (e, stdout, stderr) => (e ? reject(new Error((stderr || e.message).trim().split(/\r?\n/)[0])) : resolve(stdout.trim()))));
 const PS = (script, env) => run("powershell", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], env);
 
 // Only the After Effects window (PrintWindow also works when it is behind other windows). Output path via env var.
