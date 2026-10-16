@@ -654,6 +654,19 @@ var AEH = AEH || {};
         // Expert checks on a comp + timing data (key times, audio files) for the visual review strip.
         audit: function (args) {
             // Effects that stall renders or leave transparent edges (both bit the CONTROL THE MOTION promo).
+            // After Effects cannot draw a layer wider or taller than 30,000 px; past that, renders go black silently.
+            function sizeCheck(l, issues) {
+                if (!l.source || !l.source.width) return;   // footage, solids and comps only
+                var s = l.property("ADBE Transform Group").property("ADBE Scale"), mx = 0, ps = 100, j;
+                if (s.numKeys) { for (j = 1; j <= s.numKeys; j++) mx = Math.max(mx, s.keyValue(j)[0]); } else mx = s.value[0];
+                if (l.parent) {
+                    var pS = l.parent.property("ADBE Transform Group").property("ADBE Scale");
+                    ps = 0;
+                    if (pS.numKeys) { for (j = 1; j <= pS.numKeys; j++) ps = Math.max(ps, pS.keyValue(j)[0]); } else ps = pS.value[0];
+                }
+                var px = Math.max(l.source.width, l.source.height) * (mx / 100) * (ps / 100);
+                if (px > 30000) issues.push(l.name + ": about " + Math.round(px) + " px at its largest scale (limit 30,000 px) — renders go black past that. Split it, or swap it for a solid sized to the frame");
+            }
             function fxChecks(l, issues) {
                 var fx = l.property("ADBE Effect Parade"), edge = false;
                 if (!fx) return;
@@ -702,6 +715,7 @@ var AEH = AEH || {};
                 if (l.inPoint >= c.duration || l.outPoint <= 0) issues.push(l.name + ": entirely outside the comp's time range");
                 if (l.source && l.source.footageMissing) issues.push(l.name + ": footage missing");
                 fxChecks(l, issues);
+                sizeCheck(l, issues);
                 if (l.threeDLayer && l.parent && tg) {   // coplanar siblings with different orientation slice through each other
                     var key = "p" + l.parent.index, ori = String(tg.property("ADBE Orientation").value);
                     if (!sib[key]) sib[key] = [];
