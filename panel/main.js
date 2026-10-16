@@ -12,10 +12,11 @@
   }
 
   var $ = function (id) { return document.getElementById(id); };
-  var allowRaw = $("allowRaw");
+  // A stale index.html (older install) may lack a switch: fall back to a safe default instead of crashing.
+  var allowRaw = $("allowRaw") || { checked: true };
   try { allowRaw.checked = localStorage.getItem("allowRaw") !== "0"; } catch (e) { allowRaw.checked = true; }
   allowRaw.onchange = function () { try { localStorage.setItem("allowRaw", allowRaw.checked ? "1" : "0"); } catch (e) {} };
-  var readOnly = $("readOnly");
+  var readOnly = $("readOnly") || { checked: false };
   try { readOnly.checked = localStorage.getItem("readOnly") === "1"; } catch (e) {}
   readOnly.onchange = function () { try { localStorage.setItem("readOnly", readOnly.checked ? "1" : "0"); } catch (e) {} };
   // Calls that change the project or disk. checkpoint "list" is allowed in read-only mode.
