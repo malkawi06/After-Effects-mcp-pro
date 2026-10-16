@@ -24,6 +24,7 @@ import { analyseBeats, analyseRhythm, toComp, rhythmMap, keyHits, scoreSync, syn
 
 const CFG_PATH = path.join(os.homedir(), ".ae-claude-bridge.json");
 const WORK_DIR = path.join(os.homedir(), "Documents", "AE-Claude");
+const SERVER_VERSION = "1.5.0";
 const CALL_TIMEOUT_MS = 55_000;           // stay under the client's 60 s request timeout
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -55,6 +56,26 @@ async function bridge(fn, args = {}) {
 const text = (t) => ({ content: [{ type: "text", text: typeof t === "string" ? t : JSON.stringify(t) }] });
 const fail = (e) => ({ isError: true, content: [{ type: "text", text: String(e.message || e) }] });
 const tool = (handler) => async (args) => { try { return await handler(args); } catch (e) { return fail(e); } };
+// Output paths from the model: absolute, expected extension, no traversal tricks. undefined passes through.
+function checkOut(p, ext) {
+  if (p == null) return p;
+  if (!path.isAbsolute(p) || path.normalize(p) !== path.resolve(p) || path.extname(p).toLowerCase() !== ext)
+    throw new Error(`Output path must be an absolute ${ext} path`);
+  return path.resolve(p);
+}
+
+// Structured log (JSON lines, no arguments or project content): Documents/AE-Claude/logs/server.jsonl, rotated at 1 MB.
+const LOG = path.join(WORK_DIR, "logs", "server.jsonl");
+let opSeq = 0;
+function logOp(rec) {
+  try {
+    fs.mkdirSync(path.dirname(LOG), { recursive: true });
+    if (fs.existsSync(LOG) && fs.statSync(LOG).size > 1 << 20) fs.renameSync(LOG, LOG + ".1");
+    fs.appendFileSync(LOG, JSON.stringify(rec) + "\n");
+  } catch {}
+}
+const errKind = (m) => (/Cannot reach|did not answer|never started|bad token/.test(m) ? "bridge"
+  : /required|must|not allowed|Unknown|not found|No track|no longer exists|Invalid/i.test(m) ? "validation" : "app");
 
 // ---------------- image helpers (preview) ----------------
 async function waitForFile(file, timeoutMs = 30_000) {
@@ -304,17 +325,31 @@ function startRender(prep, output) {
   child.stderr.on("data", onData);
   child.on("error", (e) => { job.status = "failed"; job.tail.push(String(e)); });
   child.on("close", (code) => {
-    job.status = code === 0 && fs.existsSync(output) ? "done" : "failed";
     job.seconds = Math.round((Date.now() - job.started) / 100) / 10;
+    if (job.status === "cancelled") return;
+    if (code !== 0 || !fs.existsSync(output)) { job.status = "failed"; return; }
+    job.status = "done";
+    job.verified = verifyMp4(output);   // file exists ≠ valid video: check size and the MP4 container header
   });
+  job.cancel = () => { if (job.status === "running") { job.status = "cancelled"; child.kill(); } };
   jobs.set(id, job);
   return job;
 }
 
+// Basic output check: non-trivial size and an ISO-BMFF 'ftyp' box at the start. Not a decode test.
+function verifyMp4(file) {
+  try {
+    const st = fs.statSync(file), fd = fs.openSync(file, "r"), b = Buffer.alloc(12);
+    fs.readSync(fd, b, 0, 12, 0); fs.closeSync(fd);
+    const ok = st.size > 1024 && b.toString("ascii", 4, 8) === "ftyp";
+    return ok ? `mp4 container ok, ${(st.size / 1048576).toFixed(1)} MB` : `not a valid MP4 (${st.size} bytes)`;
+  } catch (e) { return `cannot read output: ${e.message}`; }
+}
 function jobReport(job) {
   const r = { job_id: job.id, status: job.status, comp: job.comp, output: job.output,
     progress: job.total ? `${Math.min(job.frame, job.total)}/${job.total} frames` : `${job.frame} frames` };
   if (job.seconds) r.seconds = job.seconds;
+  if (job.verified) r.verified = job.verified;
   if (job.status === "failed") r.log = job.tail.join("\n");
   return r;
 }
@@ -403,14 +438,35 @@ drops typed markers; drop_at puts the drop where the story needs it. Every cut a
 sections get slow moves and no cut faster than the cut pulse; slams only on real hits. ae_review scores cuts/moments
 against the beats — fix every off-beat or too-fast item before showing the user.`;
 
-const server = new McpServer({ name: "after-effects-claude-bridge", version: "1.4.0" }, { instructions: INSTRUCTIONS });
+const server = new McpServer({ name: "after-effects-claude-bridge", version: SERVER_VERSION }, { instructions: INSTRUCTIONS });
+// Every tool call is timed and logged (tool, ms, ok, error kind) — the model-facing reply stays unchanged.
+{ const reg = server.registerTool.bind(server);
+  server.registerTool = (name, cfg, handler) => reg(name, cfg, async (args, extra) => {
+    const t0 = Date.now(), op = ++opSeq, r = await handler(args, extra), err = r?.isError ? String(r.content?.[0]?.text || "") : "";
+    logOp({ ts: new Date().toISOString(), op, tool: name, ms: Date.now() - t0, ok: !err, ...(err ? { kind: errKind(err), error: err.slice(0, 160) } : {}) });
+    return r;
+  }); }
+// Behaviour hints for the client (MCP tool annotations): read-only, destructive (can overwrite/delete), network.
+const ANN = {
+  ae_status: { readOnlyHint: true }, ae_inspect: { readOnlyHint: true }, ae_preview: { readOnlyHint: true },
+  ae_review: { readOnlyHint: true }, ae_guide: { readOnlyHint: true }, ae_render_status: { readOnlyHint: false, destructiveHint: false },
+  ae_run_jsx: { destructiveHint: true }, ae_checkpoint: { destructiveHint: true }, ae_render: { destructiveHint: true },
+  ae_memory: { destructiveHint: true }, ae_music: { destructiveHint: true, openWorldHint: true }, ae_fonts: { destructiveHint: false, openWorldHint: true },
+  ae_reference: { destructiveHint: false }, ae_tts: { destructiveHint: false },
+};
 
 server.registerTool("ae_status", {
   description: "Bridge check: AE version, project, active comp.",
   inputSchema: {},
 }, tool(async () => {
   const [s, caps] = await Promise.all([bridge("status"), capsLockOn()]);
-  return text(caps ? { ...s, warning: "Caps Lock is on — After Effects stops refreshing its viewer ('Refresh Disabled'). Ask the user to turn it off." } : s);
+  const warn = [];
+  if (caps) warn.push("Caps Lock is on — After Effects stops refreshing its viewer ('Refresh Disabled'). Ask the user to turn it off.");
+  if (s.host !== SERVER_VERSION || (s.panel && s.panel.version !== SERVER_VERSION))
+    warn.push(`Version mismatch: server ${SERVER_VERSION}, panel ${s.panel?.version ?? "?"}, host script ${s.host ?? "< 1.5"}. Reinstall the panel files (install script) and restart After Effects.`);
+  const can = { server: SERVER_VERSION, uiScreenshot: ["win32", "darwin"].includes(process.platform), tts: ["win32", "darwin"].includes(process.platform),
+    rawJsx: s.panel?.rawJsx ?? null, readOnly: s.panel?.readOnly ?? null, layerIds: s.layerIds ?? null };
+  return text({ ...s, capabilities: can, ...(warn.length ? { warnings: warn } : {}) });
 }));
 
 server.registerTool("ae_run_jsx", {
@@ -432,12 +488,14 @@ server.registerTool("ae_run_jsx", {
 }));
 
 server.registerTool("ae_inspect", {
-  description: "No comp: list project items. With comp: settings, layers (kind, timing, parent, effects) and animated/expression props.",
+  description: "No args: project items, missing footage. comp: its layers. comp+layer (name|index|#id): that layer in depth (values, keys, effect params, text, expression errors).",
   inputSchema: {
     comp: z.union([z.string(), z.number()]).optional(),
+    layer: z.union([z.string(), z.number()]).optional(),
     props: z.boolean().optional().describe("animated props, default true"),
+    offset: z.number().int().min(0).optional(), limit: z.number().int().min(1).max(500).optional().describe("page size, default 200 layers / 300 items"),
   },
-}, tool(async ({ comp, props }) => text(await bridge("inspect", { comp, props }))));
+}, tool(async ({ comp, layer, props, offset, limit }) => text(await bridge("inspect", { comp, layer, props, offset, limit }))));
 
 server.registerTool("ae_preview", {
   description: "Frames of a comp as one image grid. ui=true: screenshot of the After Effects window itself (save_to keeps the PNG).",
@@ -451,7 +509,7 @@ server.registerTool("ae_preview", {
   },
 }, tool(async ({ comp, times, count, width, ui, save_to }) => {
   if (ui) {
-    const file = save_to ?? path.join(os.tmpdir(), "ae-claude", `ui-${Date.now()}.png`);
+    const file = checkOut(save_to, ".png") ?? path.join(os.tmpdir(), "ae-claude", `ui-${Date.now()}.png`);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const size = await screenshotAE(file);
     try {
@@ -493,7 +551,8 @@ server.registerTool("ae_render", {
   const safe = String(name).replace(/[\\/:*?"<>|]/g, "_");
   const prep = await bridge("renderPrep", { comp, saveAs: save_as ?? path.join(WORK_DIR, `${safe}.aep`) });
   if (!prep.h264Template) throw new Error("No H.264 output module template found in this After Effects install.");
-  const out = output ?? path.join(WORK_DIR, "renders", `${safe}.mp4`);
+  const out = checkOut(output, ".mp4") ?? path.join(WORK_DIR, "renders", `${safe}.mp4`);
+  checkOut(save_as, ".aep");
   fs.mkdirSync(path.dirname(out), { recursive: true });
   if (fs.existsSync(out)) fs.rmSync(out);
   const job = startRender(prep, out);
@@ -503,11 +562,12 @@ server.registerTool("ae_render", {
 }));
 
 server.registerTool("ae_render_status", {
-  description: "Progress of an ae_render job.",
-  inputSchema: { job_id: z.string() },
-}, tool(async ({ job_id }) => {
+  description: "Progress of an ae_render job (running, done + verified, failed, cancelled). cancel=true stops it.",
+  inputSchema: { job_id: z.string(), cancel: z.boolean().optional() },
+}, tool(async ({ job_id, cancel }) => {
   const job = jobs.get(job_id);
-  if (!job) throw new Error(`Unknown job ${job_id}`);
+  if (!job) throw new Error(`Unknown job ${job_id} (jobs live only while this server runs)`);
+  if (cancel) job.cancel();
   return text(jobReport(job));
 }));
 
@@ -523,7 +583,7 @@ server.registerTool("ae_tts", {
 }, tool(async (a) => {
   if (a.voice === "list") return text(await tts(a));
   if (!a.text) throw new Error("text is required");
-  const out = a.out ?? path.join(WORK_DIR, "audio", `tts-${Date.now()}.wav`);
+  const out = checkOut(a.out, ".wav") ?? path.join(WORK_DIR, "audio", `tts-${Date.now()}.wav`);
   fs.mkdirSync(path.dirname(out), { recursive: true });
   await tts({ ...a, out });
   return text({ file: out, bytes: fs.statSync(out).size });
@@ -925,7 +985,7 @@ if (listHandler) server.server._requestHandlers.set("tools/list", async (req, ex
   const res = await listHandler(req, extra);
   res.tools = res.tools.map(({ title, execution, inputSchema, ...t }) => {
     const { $schema, ...schema } = inputSchema || {};
-    return { ...t, inputSchema: schema };
+    return { ...t, inputSchema: schema, ...(ANN[t.name] ? { annotations: ANN[t.name] } : {}) };
   });
   return res;
 });

@@ -56,12 +56,20 @@ var AEH = AEH || {};
     };
     AEH.layer = function (comp, nameOrIndex) {
         var l = null;
+        if (typeof nameOrIndex === "string" && /^#\d+$/.test(nameOrIndex)) {   // stable id from ae_inspect: never falls back to a name
+            var want = Number(nameOrIndex.substr(1));
+            for (var j = 1; j <= comp.numLayers && !l; j++) if (AEH.layerId(comp.layer(j)) === want) l = comp.layer(j);
+            if (!l) throw new Error("Layer " + nameOrIndex + " no longer exists in " + comp.name + " (deleted or project reloaded) — inspect again");
+            return l;
+        }
         if (typeof nameOrIndex === "number") l = comp.layer(nameOrIndex);
         else if (nameOrIndex instanceof RegExp) { for (var i = 1; i <= comp.numLayers && !l; i++) if (nameOrIndex.test(comp.layer(i).name)) l = comp.layer(i); }
         else l = comp.layers.byName(nameOrIndex);
         if (!l) throw new Error("Layer not found: " + nameOrIndex);
         return l;
     };
+    // Session-stable layer id (Layer.id, newer AE versions); null when this AE has no layer ids.
+    AEH.layerId = function (l) { try { return typeof l.id === "number" ? l.id : null; } catch (e) { return null; } };
     // Reuse a comp by name (clear its layers, keep the item so precomp layers that use it stay linked), or create it.
     AEH.resetComp = function (name, w, h, dur, fps) {
         var c = null;
@@ -435,13 +443,14 @@ var AEH = AEH || {};
             } else animated(p, id, out, depth + 1); } catch (e) {}   // some props refuse access; skip them
         }
     }
-    function describeComp(c, withProps) {
-        var layers = [];
-        for (var i = 1; i <= c.numLayers; i++) {
+    function describeComp(c, withProps, offset, limit) {
+        var layers = [], from = Math.max(1, (offset || 0) + 1), to = Math.min(c.numLayers, from - 1 + (limit || 200));
+        for (var i = from; i <= to; i++) {
             var l = c.layer(i), fx = [], eg = l.property("ADBE Effect Parade");
             if (eg) for (var e = 1; e <= eg.numProperties; e++) fx.push(eg.property(e).matchName + " (" + eg.property(e).name + ")");
             // Only non-default fields, to keep responses small.
-            var d = { i: i, name: l.name, kind: layerKind(l) };
+            var d = { i: i, name: l.name, kind: layerKind(l) }, lid = AEH.layerId(l);
+            if (lid !== null) d.id = lid;
             if (!l.enabled) d.enabled = false;
             if (l.inPoint > 0.0001 || l.outPoint < c.duration - 0.0001) d.time = [r3(l.inPoint), r3(l.outPoint)];
             if (Math.abs(l.startTime) > 0.0001) d.start = r3(l.startTime);
@@ -454,13 +463,68 @@ var AEH = AEH || {};
             layers.push(d);
         }
         var o = { name: c.name, id: c.id, size: [c.width, c.height], duration: c.duration, fps: c.frameRate, layers: layers };
+        if (to < c.numLayers || from > 1) o.page = { from: from, to: to, total: c.numLayers };
         if (c.workAreaStart > 0 || c.workAreaDuration < c.duration) o.workArea = [r3(c.workAreaStart), r3(c.workAreaStart + c.workAreaDuration)];
         return o;
     }
 
-    // Title-safe check from real layer bounds: a temporary Point Control evaluates toComp() of the layer's
-    // source rect (handles parenting, scale, rotation). Flags text/graphics that sit, at rest, partly outside
-    // the 5% margin. Layers moving in or out (box still changing) and fully off-screen layers are ignored.
+    // One layer in depth: timing, transform values, keyframes (time, value, interpolation), effects with
+    // parameters, text style, expressions and their errors. Capped so a heavy layer can't flood the context.
+    function short(v) {
+        if (v instanceof Array) { var a = []; for (var i = 0; i < v.length; i++) a.push(typeof v[i] === "number" ? r3(v[i]) : v[i]); return a; }
+        if (typeof v === "number") return r3(v);
+        if (v instanceof TextDocument) return v.text;
+        if (v instanceof Shape) return "[path " + v.vertices.length + " pts]";
+        return typeof v === "string" || typeof v === "boolean" ? v : String(v);
+    }
+    function interpName(t) { return t === KeyframeInterpolationType.HOLD ? "hold" : (t === KeyframeInterpolationType.LINEAR ? "linear" : "bezier"); }
+    function describeLayer(c, l) {
+        var d = { i: l.index, id: AEH.layerId(l), name: l.name, kind: layerKind(l), time: [r3(l.inPoint), r3(l.outPoint)], start: r3(l.startTime) };
+        if (l.parent) d.parent = l.parent.name;
+        if (!l.enabled) d.enabled = false;
+        try { d.blend = String(l.blendingMode).replace("BlendingMode.", ""); d.motionBlur = l.motionBlur; d.threeD = l.threeDLayer; } catch (e) {}
+        var tg = l.property("ADBE Transform Group"), tr = {};
+        for (var i = 1; i <= tg.numProperties; i++) { var p = tg.property(i); try { if (p.enabled !== false && !p.isSeparationFollower) tr[p.matchName.replace("ADBE ", "")] = short(p.value); } catch (e) {} }
+        d.transform = tr;
+        var keyed = [], budget = 40;
+        (function walk(g, path, depth) {
+            if (depth > 12) return;
+            for (var i = 1; i <= g.numProperties && budget > 0; i++) {
+                var p = g.property(i), id = path + "/" + p.matchName.replace("ADBE ", "");
+                try {
+                    if (p.propertyType !== PropertyType.PROPERTY) { walk(p, id, depth + 1); continue; }
+                    var hasExpr = p.canSetExpression && p.expressionEnabled;
+                    if (!p.numKeys && !hasExpr) continue;
+                    var r = { path: id.substr(1) }, ks = [];
+                    for (var k = 1; k <= Math.min(p.numKeys, 12); k++)
+                        ks.push([r3(p.keyTime(k)), short(p.keyValue(k)), interpName(p.keyOutInterpolationType(k))]);
+                    if (ks.length) r.keys = ks;
+                    if (p.numKeys > 12) r.moreKeys = p.numKeys - 12;
+                    if (hasExpr) { r.expression = p.expression.length > 400 ? p.expression.substr(0, 400) + "…" : p.expression; if (p.expressionError) r.expressionError = p.expressionError; }
+                    keyed.push(r); budget--;
+                } catch (e) {}
+            }
+        })(l, "", 0);
+        if (keyed.length) d.animated = keyed;
+        var eg = l.property("ADBE Effect Parade"), fx = [];
+        if (eg) for (var e = 1; e <= eg.numProperties; e++) {
+            var ef = eg.property(e), ps = {};
+            for (var q = 1, n = 0; q <= ef.numProperties && n < 20; q++) {
+                try { var pq = ef.property(q); if (pq.propertyType === PropertyType.PROPERTY && pq.propertyValueType !== PropertyValueType.NO_VALUE) { ps[pq.name] = short(pq.value); n++; } } catch (er) {}
+            }
+            fx.push({ matchName: ef.matchName, name: ef.name, enabled: ef.enabled, params: ps });
+        }
+        if (fx.length) d.effects = fx;
+        if (l instanceof TextLayer) {
+            var td = l.property("ADBE Text Properties").property("ADBE Text Document").value;
+            d.textStyle = { text: td.text, font: td.font, size: td.fontSize, tracking: td.tracking };
+            try { d.textStyle.fill = short(td.fillColor); d.textStyle.justify = String(td.justification).replace("ParagraphJustification.", ""); } catch (e) {}
+        }
+        var mk = l.property("ADBE Mask Parade"); if (mk && mk.numProperties) d.masks = mk.numProperties;
+        if (l.source) { d.source = l.source.name; try { if (l.source.footageMissing) d.missing = true; } catch (e) {} }
+        return d;
+    }
+
     // Visual events in comp time for music-sync scoring, looking inside precomps (depth ≤ 3):
     // cuts = layer in-points; moments = frames where ≥ 3 keyframes land together (a coordinated hit).
     function timelineEvents(root) {
@@ -499,6 +563,9 @@ var AEH = AEH || {};
         if (out.moments.length > 400) out.moments.length = 400;
         return out;
     }
+    // Title-safe check from real layer bounds: a temporary Point Control evaluates toComp() of the layer's
+    // source rect (handles parenting, scale, rotation). Flags text/graphics that sit, at rest, partly outside
+    // the 5% margin. Layers moving in or out (box still changing) and fully off-screen layers are ignored.
     function safeArea(c, issues) {
         var mx = c.width * 0.05, my = c.height * 0.05, n = 12, flagged = {};
         for (var i = 1; i <= c.numLayers; i++) {
@@ -537,7 +604,8 @@ var AEH = AEH || {};
     var fns = {
         status: function () {
             var a = app.project.activeItem;
-            return { aeVersion: app.version, project: app.project.file ? app.project.file.fsName : null,
+            var ids = false; try { ids = a instanceof CompItem && a.numLayers ? AEH.layerId(a.layer(1)) !== null : false; } catch (e) {}
+            return { aeVersion: app.version, host: "1.5.0", layerIds: ids, project: app.project.file ? app.project.file.fsName : null,
                      dirty: app.project.dirty, numItems: app.project.numItems,
                      activeComp: a instanceof CompItem ? a.name : null,
                      appFolder: Folder.appPackage.fsName };
@@ -550,17 +618,26 @@ var AEH = AEH || {};
             return r === undefined ? null : r;
         },
         inspect: function (args) {
-            if (args.comp !== undefined && args.comp !== null && args.comp !== "") return describeComp(AEH.comp(args.comp), args.props !== false);
-            var items = [];
+            if (args.comp !== undefined && args.comp !== null && args.comp !== "") {
+                var cc = AEH.comp(args.comp);
+                if (args.layer !== undefined && args.layer !== null && args.layer !== "") return describeLayer(cc, AEH.layer(cc, args.layer));
+                return describeComp(cc, args.props !== false, args.offset, args.limit);
+            }
+            var items = [], missing = [], from = (args.offset || 0) + 1, to = Math.min(app.project.numItems, from - 1 + (args.limit || 300));
             for (var i = 1; i <= app.project.numItems; i++) {
-                var it = app.project.item(i), d = { id: it.id, name: it.name, type: it.typeName, folder: it.parentFolder.name };
+                var it = app.project.item(i);
+                try { if (it instanceof FootageItem && it.footageMissing) missing.push(it.name); } catch (e) {}
+                if (i < from || i > to) continue;
+                var d = { id: it.id, name: it.name, type: it.typeName, folder: it.parentFolder.name };
                 if (it instanceof CompItem) { d.width = it.width; d.height = it.height; d.duration = it.duration; d.fps = it.frameRate; d.layers = it.numLayers; }
-                else if (it instanceof FootageItem && it.file) d.file = it.file.fsName;
+                else if (it instanceof FootageItem && it.file) d.file = it.file.name;   // file name only; full paths rarely help and cost tokens
                 items.push(d);
             }
-            var a = app.project.activeItem;
-            return { project: app.project.file ? app.project.file.fsName : null, dirty: app.project.dirty,
-                     activeComp: a instanceof CompItem ? a.name : null, items: items };
+            var a = app.project.activeItem, o = { project: app.project.file ? app.project.file.name : null, dirty: app.project.dirty,
+                     activeComp: a instanceof CompItem ? a.name : null, items: items, renderQueue: app.project.renderQueue.numItems };
+            if (missing.length) o.missingFootage = missing;
+            if (to < app.project.numItems) o.page = { from: from, to: to, total: app.project.numItems };
+            return o;
         },
         // Writes PNG frames; the MCP server waits for them, then builds a preview image.
         frames: function (args) {

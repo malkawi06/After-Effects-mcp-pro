@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.5.0
+Hardening pass against an engineering checklist (inspection, discovery, security, rendering, observability).
+- `ae_inspect`: `layer` (name, index or `#id`) for one layer in depth (transform values, keyframes with values and interpolation, effect parameters, text style, expression errors); `offset` / `limit` paging; the project view lists missing footage and render-queue size, with file names instead of full paths.
+- Stable layer ids: `AEH.layer(comp, "#123")` uses AE's `Layer.id` and errors if it no longer exists (no silent fallback to a name).
+- `ae_status`: capabilities (server/panel/host versions, raw JSX, read-only, layer ids, UI screenshots, TTS) and a warning when the panel, host script and server versions differ.
+- Tool annotations (read-only / destructive / network) on every tool.
+- Structured log `Documents/AE-Claude/logs/server.jsonl`: tool, duration, ok, error kind; never arguments or project content; rotated at 1 MB.
+- Render: `verified` after done (size + MP4 header), `cancel` in `ae_render_status`, `cancelled` state.
+- Output paths must be absolute with the right extension (.mp4 / .aep / .wav / .png).
+- Panel: constant-time token compare; status reports the panel switches.
+- docs/ARCHITECTURE.md: data flow, tool classes, security model, caching rules, test types.
+
 ## 1.4.0
 - **Music sync engine** (`rhythm.js`): per-beat kick/snare strength, cut pulse (every 2 beats above ~115 BPM), quiet/mid/loud sections, drops and breaks snapped to the real hit. Tested on a phonk track: drop and break found within one frame of a hand measurement.
 - `ae_music use`: rhythm map in the reply, typed markers (pulse hits, DROP, BREAK, sections), `drop_at` / `offset` to trim the track.

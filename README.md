@@ -95,7 +95,7 @@ Measured with `npm run bench`. Counts use the Claude tokenizer from `@anthropic-
 
 | What | Before optimisation | **Now** | Saving |
 |---|---:|---:|---:|
-| Tool definitions (sent with every turn) | 1,625 (10 tools) | **1,568 (14 tools)** | −4 % total, 112 tokens per tool vs 163 (14 tools now) |
+| Tool definitions (sent with every turn) | 1,625 (10 tools) | **1,792 (14 tools)** | 128 tokens per tool vs 163 (includes read-only/destructive annotations) |
 | `ae_inspect` of a 10-layer animated comp | 1,430 | **518** | −64 % |
 | Code Claude writes for the hello-wink clip (raw ExtendScript vs AEH) | 4,001 | **1,362** | −66 % |
 | `ae_preview`, single frame | 1,229 | **786** | −36 % |

@@ -5,6 +5,11 @@
   var CFG_PATH = path.join(os.homedir(), ".ae-claude-bridge.json");
   var PORT = 47811;
   var MAX_BODY = 8 * 1024 * 1024;
+  var PANEL_VERSION = "1.5.0";
+  function sameToken(t) {   // constant-time compare
+    var a = Buffer.from(String(t || "")), b = Buffer.from(token);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }
 
   var $ = function (id) { return document.getElementById(id); };
   var allowRaw = $("allowRaw");
@@ -59,7 +64,7 @@
   var server = http.createServer(function (req, res) {
     // Browsers always send Origin/Referer; the MCP server never does. Blocks cross-site requests outright.
     if (req.headers.origin || req.headers.referer) return send(res, 403, { ok: false, error: "browser requests are not allowed" });
-    if (req.headers["x-token"] !== token) return send(res, 401, { ok: false, error: "bad token" });
+    if (!sameToken(req.headers["x-token"])) return send(res, 401, { ok: false, error: "bad token" });
     if (!/^application\/json/.test(req.headers["content-type"] || "")) return send(res, 415, { ok: false, error: "JSON only" });
     if (req.method !== "POST" || req.url !== "/call") return send(res, 404, { ok: false, error: "not found" });
     var chunks = [], size = 0;
@@ -80,6 +85,9 @@
         var ok = typeof out === "string" && out.indexOf('{"ok":true') === 0;
         log(msg.fn + " " + (Date.now() - t0) + "ms" + (ok ? "" : " ERROR") + preview, !ok);
         if (!out || out === "EvalScript error.") out = JSON.stringify({ ok: false, error: "EvalScript error (host script not loaded or a modal dialog is open)." });
+        else if (ok && msg.fn === "status") {   // capability discovery: what this panel allows right now
+          try { var o = JSON.parse(out); o.result.panel = { version: PANEL_VERSION, readOnly: readOnly.checked, rawJsx: allowRaw.checked }; out = JSON.stringify(o); } catch (e) {}
+        }
         send(res, 200, out);
       });
     });

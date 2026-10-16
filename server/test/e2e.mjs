@@ -19,7 +19,7 @@ fs.chmodSync(fakeAerender, 0o755);
 const handlers = {
   status: () => ({ aeVersion: "26.3", activeComp: "Main", dirty: true }),
   runJsx: (a) => (a.code === "boom" ? { __err: "Error: boom", line: 3 } : a.undoName === "Add music" ? { comp: "Main", layer: "x" } : { echoed: a.code, undo: a.undo ?? true }),
-  inspect: (a) => ({ comp: a.comp ?? null }),
+  inspect: (a) => ({ comp: a.comp ?? null, layer: a.layer ?? null, limit: a.limit ?? null }),
   frames: (a) => {
     const frames = a.times.map((t, i) => {
       const png = new PNG({ width: 320, height: 180 });
@@ -82,6 +82,10 @@ check("instructions", (client.getInstructions() || "").includes("textAnim") && c
 
 let r = await client.callTool({ name: "ae_status", arguments: {} });
 check("status", r.content[0].text.includes("26.3"));
+{ const st = JSON.parse(r.content[0].text);
+  check("status: capabilities + version-mismatch warning", st.capabilities?.server === "1.5.0" && /Version mismatch/.test((st.warnings || []).join()), r.content[0].text); }
+{ const lt = (await client.listTools()).tools, an = Object.fromEntries(lt.map((t) => [t.name, t.annotations || {}]));
+  check("annotations: read-only vs destructive", an.ae_inspect.readOnlyHint === true && an.ae_run_jsx.destructiveHint === true && an.ae_music.openWorldHint === true); }
 r = await client.callTool({ name: "ae_run_jsx", arguments: { code: "1+1", undo: false } });
 check("run_jsx ok", JSON.parse(r.content[0].text).undo === false);
 r = await client.callTool({ name: "ae_run_jsx", arguments: { code: "boom" } });
@@ -94,6 +98,15 @@ check("preview single", r.content[0].type === "image");
 r = await client.callTool({ name: "ae_render", arguments: { wait_seconds: 10 } });
 const job = JSON.parse(r.content[0].text);
 check("render done", job.status === "done" && job.progress === "3/3 frames" && fs.existsSync(job.output), r.content[0].text);
+check("render output verified (fake file is not an MP4)", /not a valid MP4/.test(job.verified || ""), r.content[0].text);
+r = await client.callTool({ name: "ae_render", arguments: { output: "relative/out.mp4", wait_seconds: 0 } });
+check("render rejects relative output path", r.isError && /absolute \.mp4/.test(r.content[0].text), r.content[0].text);
+r = await client.callTool({ name: "ae_render", arguments: { output: path.join(HOME, "slow.mp4"), wait_seconds: 0 } });
+{ const j2 = JSON.parse(r.content[0].text);
+  r = await client.callTool({ name: "ae_render_status", arguments: { job_id: j2.job_id, cancel: true } });
+  check("render cancel", JSON.parse(r.content[0].text).status === "cancelled", r.content[0].text); }
+r = await client.callTool({ name: "ae_inspect", arguments: { comp: "Main", layer: "#12", limit: 5 } });
+check("inspect passes layer/limit to the bridge", JSON.parse(r.content[0].text).layer === "#12", r.content[0].text);
 r = await client.callTool({ name: "ae_render_status", arguments: { job_id: job.job_id } });
 check("render status", JSON.parse(r.content[0].text).status === "done");
 r = await client.callTool({ name: "ae_tts", arguments: { text: "hi" } });
@@ -171,5 +184,8 @@ fs.writeFileSync(path.join(HOME, ".ae-claude-bridge.json"), JSON.stringify({ por
 r = await client.callTool({ name: "ae_status", arguments: {} });
 check("bad token -> error", r.isError && r.content[0].text.includes("bad token"), r.content[0].text);
 
+{ const log = fs.readFileSync(path.join(HOME, "Documents", "AE-Claude", "logs", "server.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const bad = log.find((x) => x.tool === "ae_status" && !x.ok);
+  check("structured log: every call, error kind, no arguments", log.length > 30 && bad?.kind === "bridge" && !log.some((x) => "args" in x || "code" in x), `${log.length} lines`); }
 await client.close(); mock.close();
 console.log("bridge calls:", calls.join(","));
