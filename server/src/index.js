@@ -339,8 +339,9 @@ function startRender(prep, output) {
     job.seconds = Math.round((Date.now() - job.started) / 100) / 10;
     if (job.status === "cancelled") return;
     if (code !== 0 || !fs.existsSync(output)) { job.status = "failed"; return; }
-    job.status = "done";
     job.verified = verifyMp4(output);   // file exists ≠ valid video: check size and the MP4 container header
+    // aerender can exit 0 after stalling (the rest of the file is black): trust the last frame it reported
+    job.status = job.frame && job.frame < job.total - 1 ? "incomplete" : "done";
   });
   job.cancel = () => { if (job.status === "running") { job.status = "cancelled"; child.kill(); } };
   jobs.set(id, job);
@@ -361,7 +362,8 @@ function jobReport(job) {
     progress: job.total ? `${Math.min(job.frame, job.total)}/${job.total} frames` : `${job.frame} frames` };
   if (job.seconds) r.seconds = job.seconds;
   if (job.verified) r.verified = job.verified;
-  if (job.status === "failed") r.log = job.tail.join("\n");
+  if (job.status === "failed" || job.status === "incomplete") r.log = job.tail.join("\n");
+  if (job.status === "incomplete") r.warning = `aerender stopped at frame ${job.frame} of ${job.total}; frames after that are black. Render the rest as a separate comp and splice.`;
   return r;
 }
 
