@@ -5,7 +5,7 @@ description: Build, edit, review and render Adobe After Effects work at senior m
 
 # After Effects via Claude Bridge — senior motion designer mode
 
-Tools: `ae_status` `ae_inspect` `ae_run_jsx` `ae_preview` `ae_review` `ae_reference` `ae_checkpoint` `ae_render` `ae_render_status` `ae_tts` `ae_guide` `ae_memory` `ae_music`.
+Tools: `ae_status` `ae_inspect` `ae_run_jsx` `ae_preview` `ae_review` `ae_reference` `ae_checkpoint` `ae_render` `ae_render_status` `ae_tts` `ae_guide` `ae_memory` `ae_music` `ae_fonts`.
 
 Use this for **every** After Effects, motion, animation or video request, in Arabic or English (افتر افكتس، موشن، انيميشن، مقطع، فيديو، مونتاج، لوغو متحرك).
 
@@ -17,16 +17,17 @@ Use this for **every** After Effects, motion, animation or video request, in Ara
 - If `ae_status` fails: tell the user to open After Effects → Window > Extensions > Claude Bridge (green dot). If raw ExtendScript is blocked, ask them to tick the checkbox in the panel.
 
 ## Workflow for a new piece (agreed with the user, always in this order)
-0. **Brief first, before any research.** Ask the user in one short batch (skip what they already said): what the video is for, audience, platform/format/length, message and copy, mood, brand (colours, fonts, logo), assets they have (footage, screenshots, recordings), music taste, references they like or hate. The answers decide what to search for.
+0. **Brief first, before any research.** Ask the user in one short batch (skip what they already said): what the video is for, audience, platform/format/length, message and copy, mood, brand (colours, fonts, logo), assets they have (footage, screenshots, recordings), music taste, references they like or hate. The answers decide what to search for. Then show a **gallery of 3–6 matching references** (title, creator, link, one line each) and let them pick or react; show **3 font options** with `ae_fonts preview` (install free OFL families with `ae_fonts install` when needed).
 1. `ae_status`, then:
    - **Inspiration (aimed at the brief):** `ae_memory search` for cards learned earlier, then `ae_guide inspiration` and study 3–5 references. Save new technique cards.
    - **Music:** `ae_music search`. If nothing fits, `ae_guide music`, find a royalty-free track, check the license, `ae_music add`.
-2. **Written plan with timing:** scenes (seconds and frames), copy, rhythm, music (and why), and which idea came from which reference (name + URL).
-3. **Styleframes:** build the key frame of each scene in AE and show them with `ae_preview`.
-4. **Stop and wait for the user's approval.** Change the plan if asked.
-5. Build in small `ae_run_jsx` steps (comp+bg → layout/type → animation → polish → audio). Load the matching `ae_guide` topic first when the task involves transitions, typography, camera/3D, music sync, expressions or delivery (only that topic).
-6. `ae_review` after each animation pass. Read the strip: orange bars = movement between samples, white ticks = keyframes, cyan = audio, grey lines = seconds. Fix every check it reports, and judge it yourself (below). Use `ae_preview {times:[t]}` to zoom on one moment.
-7. Show the user the review. **Wait for approval**, then `ae_render`; confirm the job says `done`. Report comp, length and output path, plus any music credit line.
+2. **Music first, then timing:** `ae_music use` (use `drop_at` to put the drop where the story needs it) returns the rhythm map. Load `ae_guide audio-sync`. **Sync is the user's top priority.**
+3. **Written plan with timing on that map:** scenes (seconds and frames), copy, rhythm, music (and why), and which idea came from which reference (name + URL).
+4. **Styleframes:** build the key frame of each scene in AE and show them with `ae_preview`.
+5. **Stop and wait for the user's approval.** Change the plan if asked.
+6. Build in small `ae_run_jsx` steps (comp+bg → layout/type → animation → polish → audio). Load the matching `ae_guide` topic first when the task involves transitions, typography, camera/3D, music sync, expressions or delivery (only that topic).
+7. `ae_review` after each animation pass (it also scores every cut and big moment against the beats — fix every off-beat or too-fast item). Read the strip: orange bars = movement between samples, white ticks = keyframes, cyan = audio, yellow = cuts, red/grey bottom ticks = beat hits (pulse/other), grey lines = seconds. Fix every check it reports, and judge it yourself (below). Use `ae_preview {times:[t]}` to zoom on one moment.
+8. Show the user the review. **Wait for approval**, then `ae_render`; confirm the job says `done`. Report comp, length and output path, plus any music credit line.
 
 **Editing existing work:** `ae_inspect` → `ae_checkpoint create` → edit what exists (don't rebuild) → `ae_review` → show.
 
@@ -37,6 +38,9 @@ Use this for **every** After Effects, motion, animation or video request, in Ara
 - Never `renderQueue.render()` from `ae_run_jsx` — it blocks AE and inside an undo group corrupts state ("internal structure inconsistency"). Use `ae_render`.
 - Never `alert/confirm/prompt` — modal dialogs block the bridge.
 - Never chain ternaries (`a ? b : c ? d : e`) — ExtendScript mis-parses them; parenthesize `a ? b : (c ? d : e)` or use if/else.
+- Only use glyphs the font has (Space Mono has no ✓ ●): AE silently falls back to a serif. Draw marks as shapes.
+- Heavy scripts time out the bridge (55 s): ≤ 40 new layers per call; keyframes instead of per-layer expressions.
+- Parenting to a null: set the null's anchor/position first (AEH.pivot does), then parent; child keys are then in null space.
 - Adding a property can invalidate older references in the same layer: add properties first, then re-fetch (`layer.property(...)`) before using them. The AEH helpers already do this.
 
 ## AEH library (global in ae_run_jsx)
@@ -53,6 +57,9 @@ shape(comp, "rect|ellipse|star|path", {size, radius, points, outer, inner, polyg
 drawOn(shapeLayer, t0, t1, curve)   bg(comp, "#inner", "#outer", "radial|linear")   fx(layer, matchName, {param: value})
 precompose(comp, [indices], name)   stagger(layers, frames, startSec)   marker(layer, t, text)   audio(comp, path, t, dB)
 importFile(path)  listEffects("regex")  recipe(name, args)   // recipe = user-saved snippet
+resetComp(name, w, h, dur, fps)   // rebuild a precomp in place (never remove+recreate: that unlinks it from MASTER)
+charBox(textLayer, index)   // comp box {x,y,w,h} of one letter, e.g. the O to zoom into
+pivot(comp, layers, [x, y])   // null with anchor+position on the point, layers parented: animate its Scale to zoom there
 ```
 Curves: `out` = fast start, long settle (entrances); `in` = slow start, fast end (exits); `smooth` = both (moves between holds); `expo`/`snap` = punchy, premium feel; `linear` only for constant drifts/rotations; `hold` for cuts/blinks.
 

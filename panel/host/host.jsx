@@ -55,9 +55,50 @@ var AEH = AEH || {};
         throw new Error("Composition not found: " + nameOrId);
     };
     AEH.layer = function (comp, nameOrIndex) {
-        var l = typeof nameOrIndex === "number" ? comp.layer(nameOrIndex) : comp.layers.byName(nameOrIndex);
+        var l = null;
+        if (typeof nameOrIndex === "number") l = comp.layer(nameOrIndex);
+        else if (nameOrIndex instanceof RegExp) { for (var i = 1; i <= comp.numLayers && !l; i++) if (nameOrIndex.test(comp.layer(i).name)) l = comp.layer(i); }
+        else l = comp.layers.byName(nameOrIndex);
         if (!l) throw new Error("Layer not found: " + nameOrIndex);
         return l;
+    };
+    // Reuse a comp by name (clear its layers, keep the item so precomp layers that use it stay linked), or create it.
+    AEH.resetComp = function (name, w, h, dur, fps) {
+        var c = null;
+        for (var i = 1; i <= app.project.numItems && !c; i++) { var it = app.project.item(i); if (it instanceof CompItem && it.name === name) c = it; }
+        if (!c) return app.project.items.addComp(name, w || 1920, h || 1080, 1, dur || 10, fps || 30);
+        while (c.numLayers) c.layer(1).remove();
+        if (dur) c.duration = dur;
+        if (fps) c.frameRate = fps;
+        return c;
+    };
+    // Comp-space box {x, y, w, h} (x, y = centre) of character `index` in a single-line text layer, e.g. the O of
+    // "JORDAN" to zoom into it. Works with any justification; ignores parent/rotation (keep the layer unparented).
+    AEH.charBox = function (layer, index, t) {
+        t = t || 0;
+        var td = layer.property("Source Text").value, full = td.text, r = layer.sourceRectAtTime(t, false);
+        var tmp = layer.containingComp.layers.addText(full), d = tmp.property("Source Text").value;
+        d.font = td.font; d.fontSize = td.fontSize; d.tracking = td.tracking; d.justification = ParagraphJustification.LEFT_JUSTIFY;
+        function right(s) { if (!s.length) return null; d.text = s; tmp.property("Source Text").setValue(d); var q = tmp.sourceRectAtTime(0, false); return q.left + q.width; }
+        d.text = full; tmp.property("Source Text").setValue(d);
+        var fl = tmp.sourceRectAtTime(0, false).left, x1 = right(full.substr(0, index + 1)), x0 = right(full.substr(0, index));
+        tmp.remove();
+        if (x0 === null) x0 = fl;
+        var lx = r.left + ((x0 + x1) / 2 - fl), ly = r.top + r.height / 2;   // character centre in the layer's own space
+        var a = layer.property("ADBE Transform Group").property("ADBE Anchor Point").valueAtTime(t, false),
+            p = layer.property("ADBE Transform Group").property("ADBE Position").valueAtTime(t, false),
+            s = layer.property("ADBE Transform Group").property("ADBE Scale").valueAtTime(t, false);
+        return { x: p[0] + (lx - a[0]) * s[0] / 100, y: p[1] + (ly - a[1]) * s[1] / 100, w: (x1 - x0) * s[0] / 100, h: r.height * s[1] / 100 };
+    };
+    // A null whose anchor and position sit on `point`, with `layers` parented to it (world transform kept):
+    // animate its Scale to zoom into that exact point, its Position to travel. Keyframes on children stay in null space.
+    AEH.pivot = function (comp, layers, point, name) {
+        var n = comp.layers.addNull(comp.duration);
+        n.name = name || "PIVOT";
+        n.property("ADBE Transform Group").property("ADBE Anchor Point").setValue([point[0], point[1]]);
+        n.property("ADBE Transform Group").property("ADBE Position").setValue([point[0], point[1]]);
+        for (var i = 0; i < layers.length; i++) layers[i].parent = n;
+        return n;
     };
     // Property by slash path of match names or display names: AEH.prop(layer, "ADBE Transform Group/ADBE Position")
     AEH.prop = function (layer, path) {
@@ -420,6 +461,44 @@ var AEH = AEH || {};
     // Title-safe check from real layer bounds: a temporary Point Control evaluates toComp() of the layer's
     // source rect (handles parenting, scale, rotation). Flags text/graphics that sit, at rest, partly outside
     // the 5% margin. Layers moving in or out (box still changing) and fully off-screen layers are ignored.
+    // Visual events in comp time for music-sync scoring, looking inside precomps (depth ≤ 3):
+    // cuts = layer in-points; moments = frames where ≥ 3 keyframes land together (a coordinated hit).
+    function timelineEvents(root) {
+        var fps = root.frameRate, cuts = {}, keys = {};
+        function scanKeys(group, off, t0, t1, depth) {
+            if (depth > 8) return;
+            for (var i = 1; i <= group.numProperties; i++) {
+                var p = group.property(i);
+                try {
+                    if (p.propertyType === PropertyType.PROPERTY) {
+                        for (var k = 1; k <= p.numKeys && p.numKeys > 1; k++) {
+                            var t = off + p.keyTime(k);
+                            if (t >= t0 && t < t1) { var f = Math.round(t * fps); keys[f] = (keys[f] || 0) + 1; }
+                        }
+                    } else scanKeys(p, off, t0, t1, depth + 1);
+                } catch (e) {}
+            }
+        }
+        function walk(c, off, t0, t1, depth) {
+            for (var i = 1; i <= c.numLayers; i++) {
+                var l = c.layer(i);
+                if (!l.enabled || !l.hasVideo || l.guideLayer) continue;
+                var a = off + l.inPoint, b = Math.min(t1, off + l.outPoint);
+                if (b <= t0 || a >= t1) continue;
+                if (a > t0 + 0.5 / fps) cuts[Math.round(a * fps)] = 1;
+                scanKeys(l, off + 0, Math.max(t0, a), b, 0);
+                if (depth < 3 && l.source instanceof CompItem && !l.timeRemapEnabled && Math.abs(l.stretch - 100) < 0.01)
+                    walk(l.source, off + l.startTime, Math.max(t0, a), b, depth + 1);
+            }
+        }
+        walk(root, 0, 0, root.duration, 0);
+        var out = { cuts: [], moments: [] }, f;
+        for (f in cuts) if (cuts.hasOwnProperty(f)) out.cuts.push(Math.round(f / fps * 1000) / 1000);
+        for (f in keys) if (keys.hasOwnProperty(f) && keys[f] >= 3 && !cuts[f]) out.moments.push(Math.round(f / fps * 1000) / 1000);
+        out.cuts.sort(function (x, y) { return x - y; }); out.moments.sort(function (x, y) { return x - y; });
+        if (out.moments.length > 400) out.moments.length = 400;
+        return out;
+    }
     function safeArea(c, issues) {
         var mx = c.width * 0.05, my = c.height * 0.05, n = 12, flagged = {};
         for (var i = 1; i <= c.numLayers; i++) {
@@ -538,11 +617,12 @@ var AEH = AEH || {};
                 if (movesThis) moving++;
             }
             safeArea(c, issues);
+            var ev = timelineEvents(c);
             if (moving && !c.motionBlur) issues.push("Comp motion blur switch is off while layers move");
             if (linear) issues.push(linear + " linear keyframe segment(s) — ease them unless the motion is meant to be mechanical");
             if (!c.numLayers) issues.push("Comp is empty");
             return { comp: c.name, duration: c.duration, frameRate: c.frameRate, width: c.width, height: c.height,
-                     issues: issues, keyTimes: keyTimes, audio: audio };
+                     issues: issues, keyTimes: keyTimes, audio: audio, cuts: ev.cuts, moments: ev.moments };
         },
         // Import a reference video, save frames, then remove everything it created.
         refFrames: function (args) {

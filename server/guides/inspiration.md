@@ -2,8 +2,9 @@
 
 Goal: before planning a new piece, study 3–5 strong references to learn **ideas and techniques**: structure, rhythm, transitions, type treatment, colour logic. Never reproduce a specific design, logo, character or footage.
 
-## 0. Brief first
-Never browse before you have the brief (purpose, audience, format/length, message, mood, brand, assets, music, liked/hated references). Search with the brief's words, not generic ones.
+## 0. Brief first, then a reference gallery
+Never browse before you have the brief (purpose, audience, format/length, message, mood, brand, fonts, assets, music, liked/hated references). Search with the brief's words, not generic ones.
+Then show the user a **gallery of 3–6 references** that match the brief (title, creator, link, one line on what is interesting) and let them pick or react ("like 2, but darker"). Their pick steers the plan. Fonts: `ae_fonts preview` with 3 options from the brief's mood (`ae_fonts install` free OFL families if the installed ones don't fit).
 
 ## 1. Recall first (cheap)
 `ae_memory search {query: "<brief keywords>"}` → reuse technique cards learned before. If 3+ relevant cards exist, you may skip browsing unless the brief is new territory.

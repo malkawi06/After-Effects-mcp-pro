@@ -32,7 +32,7 @@ Most After Effects MCP servers expose a fixed list of commands, such as "create 
 ![Architecture](docs/architecture.svg)
 
 1. A **CEP panel** called *Claude Bridge* runs inside After Effects. It listens on `127.0.0.1` with a secret token, logs every call, and has a switch that turns off raw code execution.
-2. An **MCP server** (Node, packaged as a one-click Claude Desktop extension) exposes 13 tools. It handles the heavy lifting outside AE: frame analysis, contact sheets, WAV envelopes, background renders and TTS.
+2. An **MCP server** (Node, packaged as a one-click Claude Desktop extension) exposes 14 tools. It handles the heavy lifting outside AE: frame analysis, contact sheets, WAV envelopes, background renders and TTS.
 3. Claude's code runs in AE's ExtendScript engine, with **AEH**, a motion-design library that turns a page of boilerplate into one line.
 
 ## Tools
@@ -42,14 +42,15 @@ Most After Effects MCP servers expose a fixed list of commands, such as "create 
 | `ae_status` | Bridge check: AE version, project, active comp |
 | `ae_inspect` | Project items, or a comp's layers, timing, parents, effects and animated or expression-driven properties |
 | `ae_run_jsx` | Runs ExtendScript with full DOM access and the AEH library, as one undo step |
-| `ae_preview` | Returns frames as an image grid |
-| `ae_review` | **Expert review**: frame grid, timeline strip and automatic checks (see below). With `reference`, a side-by-side comparison against a video |
+| `ae_preview` | Returns frames as an image grid; `ui: true` screenshots the After Effects window itself |
+| `ae_review` | **Expert review**: frame grid, timeline strip and automatic checks (see below). It also **scores music sync**: every cut and big moment (inside precomps too) against the song's beat hits, and flags off-beat or too-fast cuts. With `reference`, a side-by-side comparison against a video |
 | `ae_reference` | Analyses a reference: image, video (fps, cuts, motion rhythm) or **music (BPM, beat grid, strong hits → comp markers)** |
 | `ae_checkpoint` | Project snapshots before risky edits; revert (always snapshots the current state first) |
 | `ae_guide` | Loads one expert cookbook on demand: transitions, typography, camera-3d, audio-sync, expressions, deliver, reference |
 | `ae_render` / `ae_render_status` | Background H.264 render via `aerender`, with progress |
 | `ae_tts` | Generates a voice-over WAV with Windows SAPI or macOS `say` voices |
-| `ae_music` | Royalty-free **music library**: adds downloaded tracks after a license check, measures BPM/beats/energy, finds the right track for a brief, drops beat markers |
+| `ae_music` | Royalty-free **music library**: adds downloaded tracks after a license check, measures BPM/beats/energy, finds the right track for a brief. `use` returns a **rhythm map** (cut pulse, quiet/loud sections, drops, breaks, strongest hits), drops typed markers and can trim the track so the drop lands where you want (`drop_at`) |
+| `ae_fonts` | Lists installed fonts, installs free **Google Fonts** (OFL only, per user, no admin), and previews 3 options side by side so you can pick |
 | `ae_memory` | **Technique cards** learned from references (saved automatically, you can delete them), lessons and recipes; your personal style only when you ask |
 
 ### The visual review
@@ -94,7 +95,7 @@ Measured with `npm run bench`. Counts use the Claude tokenizer from `@anthropic-
 
 | What | Before optimisation | **Now** | Saving |
 |---|---:|---:|---:|
-| Tool definitions (sent with every turn) | 1,625 (10 tools) | **1,088 (12 tools)** | −33 % |
+| Tool definitions (sent with every turn) | 1,625 (10 tools) | **1,568 (14 tools)** | −4 % total, 112 tokens per tool vs 163 (14 tools now) |
 | `ae_inspect` of a 10-layer animated comp | 1,430 | **518** | −64 % |
 | Code Claude writes for the hello-wink clip (raw ExtendScript vs AEH) | 4,001 | **1,362** | −66 % |
 | `ae_preview`, single frame | 1,229 | **786** | −36 % |

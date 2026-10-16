@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.0
+- **Music sync engine** (`rhythm.js`): per-beat kick/snare strength, cut pulse (every 2 beats above ~115 BPM), quiet/mid/loud sections, drops and breaks snapped to the real hit. Tested on a phonk track: drop and break found within one frame of a hand measurement.
+- `ae_music use`: rhythm map in the reply, typed markers (pulse hits, DROP, BREAK, sections), `drop_at` / `offset` to trim the track.
+- `ae_review`: sync score — every cut (layer in-points, inside precomps up to 3 levels) and coordinated moment (3+ keys on a frame) vs the beat hits (±2 frames); off-beat and too-fast cuts listed; beat hits and cuts drawn on the strip. `ignore` hides intentional checks.
+- `ae_preview {ui: true}`: screenshot of the After Effects window (Windows PrintWindow / macOS screencapture), `save_to` keeps the PNG.
+- `ae_fonts`: list, install Google Fonts (OFL only, GitHub API, per-user install), preview options side by side.
+- AEH: `resetComp`, `charBox`, `pivot`; `layer()` accepts a RegExp.
+- `ae_status` warns when Caps Lock is on (AE stops refreshing its viewer). Timeout message explains how to split heavy scripts.
+- Workflow: reference gallery and font choice in the brief; sync rules in the server instructions and the audio-sync guide.
+
 ## 1.3.1
 - Workflow: a brief step comes first. Claude asks about purpose, audience, format, message, mood, brand, assets, music and references before searching for inspiration.
 - `ae_music add` takes `url`: the server downloads the track itself (https on pixabay.com, freemusicarchive.org or incompetech.com only, audio files only, ≤ 60 MB). The license is checked before downloading. Browser downloads are no longer needed.

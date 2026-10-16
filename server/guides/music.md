@@ -22,9 +22,9 @@ Rules:
 The tool measures BPM, beats, loudness, energy (low/mid/high) and an 8-part energy curve. You don't hear the music: judge mood from the source's tags and description, and pace from the BPM and curve.
 
 ## Using
-`ae_music use {id, comp, start, db}` imports the track and drops beat markers (labels 1–4 = beat in bar). Then:
-- Cut and land hits on markers; big changes on bar 1 (label "1").
-- Use the energy curve: put the reveal where the curve peaks; quiet parts under text-heavy beats.
+`ae_music use {id, comp, start, db, drop_at | offset}` imports the track, trims it (`drop_at` = comp time for the first drop), drops typed rhythm markers and returns the rhythm map. Then follow `ae_guide audio-sync`:
+- Cuts and big moves on pulse hits; the biggest change on the DROP; a held statement on the BREAK.
+- Quiet sections: slow moves, no cut faster than the cut pulse.
 - Music around −14 dB alone, −18 to −20 dB under voice.
 - Fade the last 0.5–1 s (audio levels keyframes), or end on a natural phrase end.
 - If the license needs credit, add the credit line the tool returns to the description or end card, and tell the user.

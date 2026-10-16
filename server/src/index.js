@@ -20,6 +20,7 @@ import gReference from "../guides/reference.md";
 import gMatch from "../guides/matchnames.md";
 import gInspire from "../guides/inspiration.md";
 import gMusic from "../guides/music.md";
+import { analyseBeats, analyseRhythm, toComp, rhythmMap, keyHits, scoreSync, syncReport } from "./rhythm.js";
 
 const CFG_PATH = path.join(os.homedir(), ".ae-claude-bridge.json");
 const WORK_DIR = path.join(os.homedir(), "Documents", "AE-Claude");
@@ -43,7 +44,7 @@ async function bridge(fn, args = {}) {
     });
   } catch (e) {
     throw new BridgeError(e.name === "TimeoutError"
-      ? `After Effects did not answer within ${CALL_TIMEOUT_MS / 1000}s (busy, or a modal dialog is open).`
+      ? `After Effects did not answer within ${CALL_TIMEOUT_MS / 1000}s (busy, or a modal dialog is open). A long script may still be running: wait, then ae_status. Split heavy builds (≤ 40 new layers per call, keyframes instead of per-layer expressions).`
       : "Cannot reach the Claude Bridge panel. Is After Effects open with Window > Extensions > Claude Bridge?");
   }
   const body = await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }));
@@ -193,43 +194,15 @@ async function decodeAudio(file) {
   const [L, R] = r.channelData;
   return { rate: r.sampleRate, n: r.samplesDecoded, sample: R ? (i) => (L[i] + R[i]) / 2 : (i) => L[i] };
 }
-// Tempo + beat grid + strong hits from an onset-strength curve (log-energy flux).
-function analyseBeats(a) {
-  const hop = 512, win = 1024, fps = a.rate / hop, F = Math.max(0, Math.floor((a.n - win) / hop));
-  if (F < fps * 2) throw new Error("audio too short for beat analysis (< 2 s)");
-  const env = new Float32Array(F), on = new Float32Array(F);
-  for (let f = 0; f < F; f++) { let s = 0; for (let k = 0; k < win; k += 2) { const v = a.sample(f * hop + k); s += v * v; } env[f] = Math.log(1e-9 + s / (win / 2)); }
-  for (let f = 1; f < F; f++) on[f] = Math.max(0, env[f] - env[f - 1]);
-  let best = 0, bestLag = 0;
-  const lagMin = Math.round(fps * 60 / 200), lagMax = Math.round(fps * 60 / 60);
-  const ac = new Float32Array(lagMax + 2);
-  for (let lag = lagMin; lag <= lagMax + 1; lag++) {
-    let s = 0; for (let f = 0; f + lag < F; f++) s += on[f] * on[f + lag];
-    ac[lag] = s / (F - lag);
+// Beat grid + rhythm per audio file, cached by path/size/mtime (decoding a 3-min MP3 costs ~1 s).
+const rhythmCache = new Map();
+async function rhythmOf(file) {
+  const st = fs.statSync(file), key = `${file}|${st.size}|${st.mtimeMs}`;
+  if (!rhythmCache.has(key)) {
+    const dec = await decodeAudio(file), beat = analyseBeats(dec);
+    rhythmCache.set(key, { beat, rhythm: analyseRhythm(dec, beat) });
   }
-  for (let lag = lagMin; lag <= lagMax; lag++) {
-    const bpm = 60 * fps / lag, prior = Math.exp(-0.5 * (Math.log2(bpm / 120) / 1) ** 2);   // mild preference near 120
-    if (ac[lag] * prior > best) { best = ac[lag] * prior; bestLag = lag; }
-  }
-  const y0 = ac[bestLag - 1] || 0, y1 = ac[bestLag], y2 = ac[bestLag + 1] || 0, den = y0 - 2 * y1 + y2;
-  const lag = bestLag + (den ? 0.5 * (y0 - y2) / den : 0), period = lag / fps;
-  let bestOff = 0, bestSum = -1;
-  for (let off = 0; off < lag; off++) {
-    let s = 0; for (let t = off; t < F; t += lag) s += on[Math.round(t)] || 0;
-    if (s > bestSum) { bestSum = s; bestOff = off; }
-  }
-  // frame time = window centre; extend the grid back towards 0 so the first beat isn't dropped
-  const ctr = win / 2 / a.rate;
-  let first = bestOff / fps + ctr;
-  while (first - period >= -0.05) first -= period;
-  const beats = []; for (let t = Math.max(0, first); t < a.n / a.rate; t += period) beats.push(Math.round(t * 1000) / 1000);
-  let mean = 0; for (const v of on) mean += v; mean /= F;
-  let sd = 0; for (const v of on) sd += (v - mean) ** 2; sd = Math.sqrt(sd / F);
-  const hits = []; let last = -1;
-  for (let f = 1; f < F - 1; f++) if (on[f] > mean + 2.5 * sd && on[f] >= on[f - 1] && on[f] >= on[f + 1] && f - last > fps * 0.1) { hits.push([on[f], Math.round((f / fps + ctr) * 1000) / 1000]); last = f; }
-  hits.sort((x, y) => y[0] - x[0]);
-  return { duration: Math.round(a.n / a.rate * 100) / 100, bpm: Math.round(600 / period) / 10, period: Math.round(period * 1000) / 1000,
-           beats, hits: hits.slice(0, 32).map((h) => h[1]).sort((x, y) => x - y) };
+  return rhythmCache.get(key);
 }
 // RMS per timeline bin for audio layers ([{file,startTime,inPoint,outPoint,levels}]); returns {env, notes}.
 async function audioEnvelope(layers, duration, bins) {
@@ -256,7 +229,7 @@ async function audioEnvelope(layers, duration, bins) {
 }
 
 // Timeline strip under the sheet: motion (orange), keyframes (white), audio (cyan), 1 s grid.
-function drawStrip(W, duration, { energies, sampleTimes, keyTimes = [], env = null, refEnergies = null }) {
+function drawStrip(W, duration, { energies, sampleTimes, keyTimes = [], env = null, refEnergies = null, hits = null, cuts = [] }) {
   const H = 150, d = Buffer.alloc(W * H * 4);
   const fill = (x, y, w, h, c) => {
     for (let yy = Math.max(0, y); yy < Math.min(H, y + h); yy++) for (let xx = Math.max(0, x); xx < Math.min(W, x + w); xx++) {
@@ -283,6 +256,9 @@ function drawStrip(W, duration, { energies, sampleTimes, keyTimes = [], env = nu
     const m = Math.max(1e-6, ...env);
     env.forEach((v, i) => { const h = Math.round(30 * v / m); fill(Math.round(i * W / env.length), 115 - h, Math.max(1, Math.ceil(W / env.length)), 2 * h + 1, [80, 210, 230]); });
   }
+  // Beat hits (bottom row: red = pulse hit, grey = other beat) and cuts (yellow) — they should line up.
+  if (hits) for (const [t, , s, onPulse] of hits) fill(X(t), 150 - Math.round(4 + 10 * s), 2, Math.round(4 + 10 * s), onPulse ? [255, 70, 60] : [120, 120, 120]);
+  for (const t of cuts) fill(X(t), 82, 2, 10, [255, 220, 60]);
   return { data: d, H };
 }
 function stack(a, aH, b, bH, W) { return { data: Buffer.concat([a.subarray(0, W * aH * 4), b.subarray(0, W * bH * 4)]), H: aH + bH }; }
@@ -372,15 +348,41 @@ function tts({ text: t, voice, rate, ssml, out }) {
   });
 }
 
+// ---------------- OS helpers: window screenshot, Caps Lock ----------------
+const run = (cmd, args, env = {}) => new Promise((resolve, reject) =>
+  execFile(cmd, args, { env: { ...process.env, ...env }, windowsHide: true, timeout: 30_000 },
+    (e, stdout, stderr) => (e ? reject(new Error((stderr || e.message).trim())) : resolve(stdout.trim()))));
+const PS = (script, env) => run("powershell", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], env);
+
+// Only the After Effects window (PrintWindow also works when it is behind other windows). Output path via env var.
+const WIN_SHOT = `$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Drawing
+Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public static class AecW{[DllImport("user32.dll")]public static extern bool SetProcessDPIAware();[DllImport("user32.dll")]public static extern bool GetWindowRect(IntPtr h,out RECT r);[DllImport("user32.dll")]public static extern bool PrintWindow(IntPtr h,IntPtr dc,uint f);[DllImport("user32.dll")]public static extern bool IsIconic(IntPtr h);public struct RECT{public int L,T,R,B;}}'
+[AecW]::SetProcessDPIAware() | Out-Null
+$p = Get-Process AfterFX -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+if (-not $p) { throw 'After Effects window not found' }
+$h = $p.MainWindowHandle; if ([AecW]::IsIconic($h)) { throw 'After Effects is minimized' }
+$r = New-Object AecW+RECT; [AecW]::GetWindowRect($h, [ref]$r) | Out-Null
+$w = $r.R - $r.L; $ht = $r.B - $r.T
+$bmp = New-Object System.Drawing.Bitmap $w, $ht; $g = [System.Drawing.Graphics]::FromImage($bmp); $dc = $g.GetHdc()
+$ok = [AecW]::PrintWindow($h, $dc, 2); $g.ReleaseHdc($dc)
+if (-not $ok) { $g.CopyFromScreen($r.L, $r.T, 0, 0, $bmp.Size) }
+$bmp.Save($env:AEC_OUT, [System.Drawing.Imaging.ImageFormat]::Png); "$($w)x$($ht)"`;
+async function screenshotAE(out) {
+  if (process.platform === "win32") return await PS(WIN_SHOT, { AEC_OUT: out });
+  if (process.platform === "darwin") { await run("screencapture", ["-x", out]); return "main display"; }
+  throw new Error("UI screenshots are supported on Windows and macOS");
+}
+const capsLockOn = async () => (process.platform === "win32" ? (await PS("[Console]::CapsLock").catch(() => "")) === "True" : false);
+
 // ---------------- MCP server ----------------
-const INSTRUCTIONS = `Controls a live Adobe After Effects session through the Claude Bridge panel. Use these tools for ANY After Effects,
+const INSTRUCTIONS =`Controls a live Adobe After Effects session through the Claude Bridge panel. Use these tools for ANY After Effects,
 motion-graphics, animation or video request (also Arabic: افتر افكتس، موشن، انيميشن، مقطع، فيديو، مونتاج).
 New piece, always in this order: (0) brief: before any research, ask the user (in one short batch) what the video is for,
 audience, platform/format/length, message and copy, mood, brand (colours, fonts, logo), assets they have, music taste,
-references they like or hate; skip what they already said; (1) inspiration aimed at that brief: ae_guide inspiration, find 3-5 references, save what you learn as
+references they like or hate; skip what they already said; show 3-6 reference links/clips that match it and let them pick or react; (1) inspiration aimed at that brief: ae_guide inspiration, find 3-5 references, save what you learn as
 ae_memory technique cards (automatic), and ae_memory search for cards learned earlier; (2) music: ae_music search
 (ae_guide music to add tracks; royalty-free, license checked); (3) a written plan with timing (scenes, copy, rhythm, music,
-which idea came from which reference); (4) styleframes: build key frames in AE and show them with ae_preview; (5) WAIT for
+which idea came from which reference; fonts: ae_fonts preview 3 options); (4) styleframes: build key frames in AE and show them with ae_preview; (5) WAIT for
 the user's approval; (6) build in small ae_run_jsx steps, ae_review, fix until clean; (7) show the user, wait for approval,
 then ae_render. Edits to existing work: ae_inspect -> ae_checkpoint create -> edit -> ae_review.
 Learning: technique cards are saved automatically; the user's personal style is saved only when they ask. Learn ideas,
@@ -394,14 +396,22 @@ expo snap linear hold) | expr(prop, wiggle|bounce|loop|pingpong|spin|follow|blin
 color,tracking,justify,pos}) textAnim(layer, rise|drop|pop|blur|fade|typewriter|tracking, {start,dur,curve,by,amount}) |
 shape(comp, rect|ellipse|star|path, {...}) drawOn(layer,t0,t1,curve) bg(comp,inner,outer,kind) fx(layer,matchName,
 {param:value}) fxParam(effect,name) precompose stagger(layers,frames,start) marker audio(comp,path,t,db) recipe(name,args).
-Never render inside ae_run_jsx; use ae_render. Voice-over: ae_tts then AEH.audio.`;
+resetComp(name,w,h,dur,fps) (rebuild a precomp without breaking its users) charBox(textLayer,index) (comp box of one
+letter) pivot(comp,layers,[x,y]) (null to zoom into a point). Never render inside ae_run_jsx; use ae_render. Voice-over: ae_tts then AEH.audio.
+MUSIC SYNC IS THE TOP PRIORITY: ae_music use returns the rhythm map (cut pulse, sections, drops, breaks, pulse hits) and
+drops typed markers; drop_at puts the drop where the story needs it. Every cut and big move lands on a pulse hit; quiet
+sections get slow moves and no cut faster than the cut pulse; slams only on real hits. ae_review scores cuts/moments
+against the beats — fix every off-beat or too-fast item before showing the user.`;
 
-const server = new McpServer({ name: "after-effects-claude-bridge", version: "1.3.1" }, { instructions: INSTRUCTIONS });
+const server = new McpServer({ name: "after-effects-claude-bridge", version: "1.4.0" }, { instructions: INSTRUCTIONS });
 
 server.registerTool("ae_status", {
   description: "Bridge check: AE version, project, active comp.",
   inputSchema: {},
-}, tool(async () => text(await bridge("status"))));
+}, tool(async () => {
+  const [s, caps] = await Promise.all([bridge("status"), capsLockOn()]);
+  return text(caps ? { ...s, warning: "Caps Lock is on — After Effects stops refreshing its viewer ('Refresh Disabled'). Ask the user to turn it off." } : s);
+}));
 
 server.registerTool("ae_run_jsx", {
   description: "Run ES3 ExtendScript in AE (full DOM + AEH helpers). Returns the last expression as JSON. One undo group unless undo=false.",
@@ -430,14 +440,26 @@ server.registerTool("ae_inspect", {
 }, tool(async ({ comp, props }) => text(await bridge("inspect", { comp, props }))));
 
 server.registerTool("ae_preview", {
-  description: "Frames of a comp as one image grid (left-to-right, top-to-bottom).",
+  description: "Frames of a comp as one image grid. ui=true: screenshot of the After Effects window itself (save_to keeps the PNG).",
   inputSchema: {
     comp: z.union([z.string(), z.number()]).optional(),
     times: z.array(z.number()).max(12).optional().describe("seconds; overrides count"),
     count: z.number().int().min(1).max(12).optional().describe("default 6"),
     width: z.number().int().min(160).max(1600).optional().describe("tile px, default 1024 single / 480 grid"),
+    ui: z.boolean().optional(),
+    save_to: z.string().optional().describe("abs .png path (ui only)"),
   },
-}, tool(async ({ comp, times, count, width }) => {
+}, tool(async ({ comp, times, count, width, ui, save_to }) => {
+  if (ui) {
+    const file = save_to ?? path.join(os.tmpdir(), "ae-claude", `ui-${Date.now()}.png`);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const size = await screenshotAE(file);
+    try {
+      const sheet = contactSheet([file], width ?? 1456);
+      return { content: [{ type: "image", data: Buffer.from(sheet.jpeg).toString("base64"), mimeType: "image/jpeg" },
+        { type: "text", text: `After Effects window ${size}${save_to ? `, saved ${file}` : ""}` }] };
+    } finally { if (!save_to) fs.rmSync(file, { force: true }); }
+  }
   let ts = times;
   if (!ts) {
     const info = await bridge("frames", { comp, times: [], dir: os.tmpdir() });
@@ -538,14 +560,15 @@ async function compareReview(audit, times, files, refPath, dir, width) {
 }
 
 server.registerTool("ae_review", {
-  description: "Review: frame grid + timeline (orange motion, white keys, cyan audio, grey seconds) + QA checks. reference=video compares side by side.",
+  description: "Review: frame grid + timeline strip + QA checks + music sync score (cuts/moments vs beat hits). reference=video compares side by side.",
   inputSchema: {
     comp: z.union([z.string(), z.number()]).optional(),
     samples: z.number().int().min(4).max(24).optional().describe("default 12"),
     width: z.number().int().min(200).max(800).optional().describe("tile px, default 320"),
     reference: z.string().optional(),
+    ignore: z.array(z.string()).optional().describe("hide checks containing these words (intentional, e.g. HUD)"),
   },
-}, tool(async ({ comp, samples, width, reference }) => {
+}, tool(async ({ comp, samples, width, reference, ignore }) => {
   const audit = await bridge("audit", { comp });
   const n = samples ?? (reference ? 8 : 12), dur = audit.duration;
   const times = Array.from({ length: n }, (_, i) => Math.round(((i + 0.5) * dur / n) * 100) / 100);
@@ -561,15 +584,27 @@ server.registerTool("ae_review", {
     // a short sound effect should land on something that moves: a keyframe near its start or its peak
     const near = (t) => audit.keyTimes.some((k) => Math.abs(k - t) <= 0.2);
     const sync = peaks.filter((pk) => pk.short && !near(pk.t) && !near(pk.start)).map((pk) => `sound "${pk.name}" at ${pk.t.toFixed(2)}s has no visual hit (no keyframe within 0.2s)`);
-    const strip = drawStrip(a.sheet.W, dur, { energies: a.energies, sampleTimes: times, keyTimes: audit.keyTimes, env: audit.audio.length ? env : null });
+    // Music (longest audio layer ≥ 8 s): score every cut and coordinated moment against its beat hits.
+    const music = audit.audio.filter((L) => L.outPoint - L.inPoint >= 8).sort((x, y) => (y.outPoint - y.inPoint) - (x.outPoint - x.inPoint))[0];
+    let musicRep = "", hits = null;
+    if (music) {
+      try {
+        const { beat, rhythm } = await rhythmOf(music.file), c = toComp(rhythm, music);
+        hits = c.hits;
+        musicRep = `${rhythmMap(c, beat.bpm, 24)}\n${syncReport(scoreSync(c, { cuts: audit.cuts || [], moments: audit.moments || [] }, audit.frameRate), music.name)}`;
+      } catch (e) { musicRep = `Music sync: ${e.message}`; }
+    }
+    const strip = drawStrip(a.sheet.W, dur, { energies: a.energies, sampleTimes: times, keyTimes: audit.keyTimes, env: audit.audio.length ? env : null, hits, cuts: hits ? audit.cuts || [] : [] });
     const img = stack(a.sheet.data, a.sheet.H, strip.data, strip.H, a.sheet.W);
+    const ig = (ignore || []).map((s) => s.toLowerCase()), keep = (s) => !ig.some((x) => s.toLowerCase().includes(x));
     const report = [
       `${audit.comp}: ${audit.width}x${audit.height}, ${dur}s @ ${audit.frameRate}fps. Grid ${a.sheet.cols} cols, frames at ${times.join(", ")}s.`,
       `Motion: ${motionSummary(times, a.energies, a.thumbs) || "n/a"}`,
       `Keyframes: ${audit.keyTimes.length} (${[...new Set(audit.keyTimes)].sort((x, y) => x - y).slice(0, 30).join(", ")}${audit.keyTimes.length > 30 ? " …" : ""})`,
       notes.length ? `Audio: ${notes.join("; ")}` : "Audio: none",
-      `Checks: ${[...audit.issues, ...sync, ...pixelFlags].join(" | ") || "no issues found"}`,
-    ].join("\n");
+      musicRep,
+      `Checks: ${[...audit.issues, ...sync, ...pixelFlags].filter(keep).join(" | ") || "no issues found"}`,
+    ].filter(Boolean).join("\n");
     return { content: [{ type: "image", data: toJpeg(img.data, a.sheet.W, img.H), mimeType: "image/jpeg" }, { type: "text", text: report }] };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -586,14 +621,14 @@ server.registerTool("ae_reference", {
 }, tool(async ({ path: p, count, markers }) => {
   if (!fs.existsSync(p)) throw new Error(`File not found: ${p}`);
   if (/\.(wav|mp3)$/i.test(p)) {
-    const b = analyseBeats(await decodeAudio(p));
+    const { beat: b, rhythm: rh } = await rhythmOf(p), c = toComp(rh, {});
     let marked = "";
     if (markers) {
-      const r = await bridge("addMarkers", { comp: markers, times: b.beats, labels: b.beats.map((_, i) => String((i % 4) + 1)) });
-      marked = `\nAdded ${r.markers} beat markers to ${r.comp} (labels 1-4 = beat in bar).`;
+      const mk = keyHits(c);
+      const r = await bridge("addMarkers", { comp: markers, times: mk.map((h) => h[0]), labels: mk.map((h) => h[1]) });
+      marked = `\nAdded ${r.markers} pulse-hit markers to ${r.comp}.`;
     }
-    const fmt = (a, k) => a.slice(0, k).join(", ") + (a.length > k ? ` … (+${a.length - k})` : "");
-    return text(`${path.basename(p)}: ${b.duration}s, ~${b.bpm} BPM (beat every ${b.period}s, ${Math.round(b.period * 30)} frames @30fps).\nBeats: ${fmt(b.beats, 40)}\nStrong hits: ${fmt(b.hits, 32)}${marked}`);
+    return text(`${path.basename(p)}: ${b.duration}s, ~${b.bpm} BPM (beat every ${b.period}s, ${Math.round(b.period * 30)} frames @30fps).\n${rhythmMap(c, b.bpm, 60)}${marked}`);
   }
   if (/\.(png|jpe?g)$/i.test(p)) {
     const img = readImage(p), s = sheetRaw([img], Math.min(1024, img.width));
@@ -746,6 +781,7 @@ server.registerTool("ae_music", {
     query: z.string().optional(), bpm_min: z.number().optional(), bpm_max: z.number().optional(),
     min_seconds: z.number().optional(), energy: z.enum(["low", "mid", "high"]).optional(),
     id: z.string().optional(), comp: z.string().optional(), start: z.number().optional(), db: z.number().optional(), markers: z.boolean().optional(),
+    offset: z.number().optional().describe("seconds into the track"), drop_at: z.number().optional().describe("comp time the first drop lands on"),
   },
 }, tool(async (a) => {
   const ix = loadIndex();
@@ -755,14 +791,14 @@ server.registerTool("ae_music", {
     if (BLOCKED_LICENSE.test(a.license)) throw new Error(`License "${a.license}" is not allowed (non-commercial or no-derivatives).`);
     if (a.url) a.path = await downloadTrack(a.url);
     if (!a.path || !fs.existsSync(a.path)) throw new Error("url (direct audio file) or path to a downloaded wav/mp3 is required");
-    const dec = await decodeAudio(a.path), b = analyseBeats(dec), prof = musicProfile(dec);
+    const dec = await decodeAudio(a.path), b = analyseBeats(dec), prof = musicProfile(dec), rh = analyseRhythm(dec, b);
     const id = safeName(`${a.title || path.basename(a.path, path.extname(a.path))}`).slice(0, 48);
     const dest = path.join(MUSIC_DIR, "tracks", id + path.extname(a.path).toLowerCase());
     fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.copyFileSync(a.path, dest);
     const rec = { id, title: a.title || id, artist: a.artist || "unknown", file: dest, source: a.source, license: a.license, tags: (a.tags || []).map((t) => t.toLowerCase()),
-      bpm: b.bpm, duration: b.duration, beats: b.beats, hits: b.hits, ...prof, added: new Date().toISOString().slice(0, 10) };
+      bpm: b.bpm, duration: b.duration, beats: b.beats, rhythm: rh, ...prof, added: new Date().toISOString().slice(0, 10) };
     saveIndex([...ix.filter((t) => t.id !== id), rec]);
-    return text(`Added ${id}: ${rec.bpm} BPM, ${rec.duration}s, ${rec.energy} energy (${rec.loudness} dBFS), curve ${rec.curve.join(" ")}`);
+    return text(`Added ${id}: ${rec.bpm} BPM (cut pulse ${rh.pulse}s), ${rec.duration}s, ${rec.energy} energy (${rec.loudness} dBFS), curve ${rec.curve.join(" ")}, drops at ${rh.drops.slice(0, 4).join(", ") || "none"}s`);
   }
   if (a.action === "search") {
     const q = words(a.query);
@@ -777,15 +813,91 @@ server.registerTool("ae_music", {
   if (!t) throw new Error(`No track ${a.id}`);
   if (a.action === "remove") { saveIndex(ix.filter((x) => x.id !== a.id)); fs.rmSync(t.file, { force: true }); return text(`Removed ${a.id}.`); }
   // use
-  const start = a.start || 0, file = t.file.replace(/\\/g, "/");
-  const r = await bridge("runJsx", { code: `var c = AEH.comp(${JSON.stringify(a.comp || "")}); var l = AEH.audio(c, ${JSON.stringify(file)}, ${start}, ${a.db ?? -14}); l.name = ${JSON.stringify("♪ " + t.title)}; ({ comp: c.name, layer: l.name })`, undoName: "Add music" });
+  if (!t.rhythm) {   // tracks added before 1.4: analyse once and keep it
+    const dec = await decodeAudio(t.file), b = analyseBeats(dec);
+    t.rhythm = analyseRhythm(dec, b); t.beats = b.beats; saveIndex(ix);
+  }
+  const rh = t.rhythm, start = a.start || 0;
+  let offset = a.offset || 0;
+  if (a.drop_at != null) {   // trim the track so its first drop after the trim lands on drop_at (comp time)
+    const want = a.drop_at - start, d = rh.drops.find((x) => x >= want);
+    if (d == null) throw new Error(`No drop at or after ${want.toFixed(2)}s into the track (drops: ${rh.drops.join(", ") || "none"})`);
+    offset = Math.round((d - want) * 1000) / 1000;
+  }
+  const file = t.file.replace(/\\/g, "/");
+  const r = await bridge("runJsx", { code: `var c = AEH.comp(${JSON.stringify(a.comp || "")}); var l = AEH.audio(c, ${JSON.stringify(file)}, ${start}, ${a.db ?? -14});
+    l.startTime = ${start - offset}; l.inPoint = ${start}; l.name = ${JSON.stringify("♪ " + t.title)}; ({ comp: c.name, layer: l.name, duration: c.duration, fps: c.frameRate })`, undoName: "Add music" });
+  const c = toComp(rh, { startTime: start - offset, inPoint: start, outPoint: r.duration });
   let m = "";
   if (a.markers !== false) {
-    const times = t.beats.map((x) => +(x + start).toFixed(3));
-    const mk = await bridge("addMarkers", { comp: r.comp, times, labels: times.map((_, i) => String((i % 4) + 1)) });
-    m = `, ${mk.markers} beat markers`;
+    const mk = [...keyHits(c).map(([tm, ty, s]) => [tm, ty + (s >= 0.85 ? "!" : "")]),
+      ...c.drops.map((tm) => [tm, "DROP"]), ...c.breaks.map((tm) => [tm, "BREAK"]), ...c.sections.map(([s0, , L]) => [s0 + 0.001, L])]
+      .sort((x, y) => x[0] - y[0]);   // addMarkers stops at the first time past the comp end
+    const res = await bridge("addMarkers", { comp: r.comp, times: mk.map((x) => x[0]), labels: mk.map((x) => x[1]) });
+    m = `, ${res.markers} rhythm markers (pulse hits, DROP, BREAK, sections)`;
   }
-  return text(`${t.title} on ${r.comp} at ${start}s${m}. ${t.bpm} BPM (beat ${(60 / t.bpm).toFixed(3)}s). Credit if required: "${t.title}" by ${t.artist} — ${t.license} — ${t.source}`);
+  return text(`${t.title} on ${r.comp} from ${start}s, ${offset}s into the track${m}.\n${rhythmMap(c, t.bpm)}\nCredit if required: "${t.title}" by ${t.artist} — ${t.license} — ${t.source}`);
+}));
+
+// ---------------- fonts: Google Fonts (OFL only) installed per user, no admin ----------------
+const FONT_DIR = process.platform === "win32" ? path.join(process.env.LOCALAPPDATA || os.homedir(), "Microsoft", "Windows", "Fonts")
+  : process.platform === "darwin" ? path.join(os.homedir(), "Library", "Fonts") : path.join(os.homedir(), ".local", "share", "fonts");
+const isFont = (b) => b.length > 12 && ([0x00010000, 0x74727565, 0x4f54544f].includes(b.readUInt32BE(0)));   // TrueType, 'true', 'OTTO'
+async function installFamily(family) {
+  const dir = String(family).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const res = await fetch(`https://api.github.com/repos/google/fonts/contents/ofl/${dir}`, { headers: { "User-Agent": "ae-mcp-pro" } });
+  if (res.status === 404) throw new Error(`"${family}" is not in Google Fonts under the OFL license`);
+  if (!res.ok) throw new Error(`GitHub API: HTTP ${res.status}`);
+  const files = (await res.json()).filter((f) => /\.ttf$/i.test(f.name)).slice(0, 24), done = [];
+  fs.mkdirSync(FONT_DIR, { recursive: true });
+  for (const f of files) {
+    if (new URL(f.download_url).hostname !== "raw.githubusercontent.com") continue;
+    const dest = path.join(FONT_DIR, path.basename(f.name));
+    if (!fs.existsSync(dest) || fs.statSync(dest).size !== f.size) {
+      const b = Buffer.from(await (await fetch(f.download_url)).arrayBuffer());
+      if (!isFont(b) || b.length > 12e6) throw new Error(`${f.name} is not a valid font file`);
+      fs.writeFileSync(dest, b);
+      if (process.platform === "win32")
+        await run("reg", ["add", "HKCU\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts", "/v", `${path.basename(f.name, ".ttf")} (TrueType)`, "/t", "REG_SZ", "/d", dest, "/f"]);
+    }
+    done.push(f.name);
+  }
+  if (!done.length) throw new Error(`No .ttf files for "${family}"`);
+  return done;
+}
+
+server.registerTool("ae_fonts", {
+  description: "Fonts: list installed (query), install Google Fonts families (OFL, per user), preview PostScript names side by side for the user to choose.",
+  inputSchema: {
+    action: z.enum(["list", "install", "preview"]),
+    query: z.string().optional(), families: z.array(z.string()).max(6).optional(),
+    fonts: z.array(z.string()).max(4).optional().describe("PostScript names"), text: z.string().optional(),
+  },
+}, tool(async ({ action, query, families, fonts, text: sample }) => {
+  if (action === "list") return text(await bridge("runJsx", { code: `AEH.catalog("fonts", ${JSON.stringify(query || "")}).slice(0, 80)`, undo: false }));
+  if (action === "install") {
+    if (!families?.length) throw new Error("families is required, e.g. [\"Archivo Black\", \"Space Mono\"]");
+    const out = [];
+    for (const f of families) out.push(`${f}: ${(await installFamily(f)).join(", ")}`);
+    return text(`Installed to ${FONT_DIR} (OFL — free for commercial use):\n${out.join("\n")}\nCheck with ae_fonts list; if a font is missing there, restart After Effects.`);
+  }
+  if (!fonts?.length) throw new Error("fonts (PostScript names from ae_fonts list) is required");
+  const r = await bridge("runJsx", { undo: false, code: `var F=${JSON.stringify(fonts)},T=${JSON.stringify(sample || "The quick motion — 2026")},n=F.length,miss=[];
+    var c=app.project.items.addComp("__font_preview",1920,Math.max(360,220*n),1,1,30);c.layers.addSolid([0.043,0.043,0.051],"bg",1920,c.height,1);
+    for(var i=0;i<n;i++){var ok=true;try{ok=app.fonts.getFontsByPostScriptName(F[i]).length>0;}catch(e){}if(!ok)miss.push(F[i]);
+      AEH.text(c,T,{font:F[i],size:100,color:"#F4F1EA",pos:[960,120+i*220]});AEH.text(c,(i+1)+"  "+F[i]+(ok?"":"  (not installed)"),{size:24,color:"#FF4D1A",pos:[960,200+i*220]});}
+    ({comp:c.name,id:c.id,missing:miss})` });
+  const dir = path.join(os.tmpdir(), "ae-claude", `fonts-${Date.now()}`);
+  try {
+    const fr = await bridge("frames", { comp: r.comp, times: [0], dir });
+    await waitForFile(fr.frames[0].file);
+    const sheet = contactSheet([fr.frames[0].file], 1200);
+    return { content: [{ type: "image", data: Buffer.from(sheet.jpeg).toString("base64"), mimeType: "image/jpeg" },
+      { type: "text", text: `Font options 1-${fonts.length}${r.missing.length ? `. Not installed: ${r.missing.join(", ")}` : ""}` }] };
+  } finally {
+    await bridge("runJsx", { undo: false, code: `var it=app.project.itemByID(${r.id});if(it)it.remove();1` }).catch(() => {});
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }));
 
 server.registerTool("ae_checkpoint", {

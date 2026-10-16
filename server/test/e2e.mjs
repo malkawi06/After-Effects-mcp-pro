@@ -34,7 +34,8 @@ const handlers = {
     });
     return { comp: "Main", width: 320, height: 180, duration: 4, frames };
   },
-  audit: () => ({ comp: "Main", duration: 4, frameRate: 30, width: 320, height: 180, issues: ["Comp motion blur switch is off while layers move"],
+  audit: () => auditMusic ? { comp: "Main", duration: 8, frameRate: 30, width: 320, height: 180, issues: ["Comp motion blur switch is off while layers move"], keyTimes: [0.5, 1.5],
+    audio: [{ name: "click.wav", file: CLICK, startTime: 0, inPoint: 0, outPoint: 8, levels: [0, 0] }], cuts: [0.5, 1.5, 2.5, 3.2, 3.3], moments: [4.5] } : ({ comp: "Main", duration: 4, frameRate: 30, width: 320, height: 180, issues: ["Comp motion blur switch is off while layers move"],
     keyTimes: [0.1, 0.9, 1.75, 2.2], audio: [{ name: "hello.wav", file: WAV, startTime: 0.4, inPoint: 0.4, outPoint: 1.4, levels: [0, 0] }] }),
   refFrames: (a) => { const n = a.count || 6; const r = handlers.frames({ times: Array.from({ length: n }, (_, i) => +((i + 0.5) * 2.4 / n).toFixed(2)), dir: a.dir }); return { name: "ref.mp4", width: 320, height: 180, duration: 2.4, frameRate: 30, hasAudio: false, frames: r.frames, removeIds: [7, 8] }; },
   removeItems: (a) => { removed = a.ids; return true; },
@@ -43,7 +44,7 @@ const handlers = {
   renderPrep: () => ({ project: "/x.aep", comp: "Main", duration: 0.1, frameRate: 30, aerender: fakeAerender, h264Template: "H.264 - Match Render Settings - 15 Mbps" }),
 };
 const calls = [];
-let removed = null, markers = null;
+let removed = null, markers = null, auditMusic = false;
 // 8 s, 120 BPM click track (44.1 kHz mono 16-bit): 50 ms 880 Hz blips every 0.5 s
 const CLICK = path.join(HOME, "click.wav");
 { const rate = 44100, n = rate * 8, b = Buffer.alloc(44 + n * 2);
@@ -76,7 +77,7 @@ await client.connect(new StdioClientTransport({ command: "node", args: [process.
 const check = (name, cond, extra = "") => { console.log(`${cond ? "PASS" : "FAIL"} ${name} ${extra}`); if (!cond) process.exitCode = 1; };
 
 const tools = (await client.listTools()).tools.map((t) => t.name).sort();
-check("tools listed", tools.join() === "ae_checkpoint,ae_guide,ae_inspect,ae_memory,ae_music,ae_preview,ae_reference,ae_render,ae_render_status,ae_review,ae_run_jsx,ae_status,ae_tts", tools.join());
+check("tools listed", tools.join() === "ae_checkpoint,ae_fonts,ae_guide,ae_inspect,ae_memory,ae_music,ae_preview,ae_reference,ae_render,ae_render_status,ae_review,ae_run_jsx,ae_status,ae_tts", tools.join());
 check("instructions", (client.getInstructions() || "").includes("textAnim") && client.getInstructions().includes("WAIT for") && client.getInstructions().includes("افتر"));
 
 let r = await client.callTool({ name: "ae_status", arguments: {} });
@@ -118,8 +119,22 @@ const lst = JSON.parse(r.content[0].text); check("memory list", lst.style === 1 
 r = await client.callTool({ name: "ae_reference", arguments: { path: CLICK, markers: "Main" } });
 const bt = r.content[0].text, bpm = Number((bt.match(/~([\d.]+) BPM/) || [])[1]);
 check("beats: 120 BPM detected", Math.abs(bpm - 120) < 2, bt.split("\n")[0]);
-check("beats: grid on the clicks", markers && Math.abs(markers.times[1] - markers.times[0] - 0.5) < 0.02 && markers.times[0] < 0.06 && markers.labels[4] === "1", markers && markers.times.slice(0, 4).join(","));
+check("beats: pulse-hit markers on the clicks (120 BPM -> cut every 2 beats)", markers && Math.abs(markers.times[1] - markers.times[0] - 1) < 0.02 && markers.times[0] < 0.56 && /K|S/.test(markers.labels[0]), markers && markers.times.slice(0, 4).join(",") + " " + markers.labels.slice(0, 2));
+check("rhythm map in reference", /Cut pulse (0\.99\d|1\.00\d)s/.test(bt) && /Pulse hits/.test(bt), bt);
 if (process.env.MP3) { r = await client.callTool({ name: "ae_reference", arguments: { path: process.env.MP3 } }); check("beats: mp3 decode", /~1[12]\d(\.\d)? BPM/.test(r.content[0].text), r.content[0].text.split("\n")[0]); }
+auditMusic = true;
+r = await client.callTool({ name: "ae_review", arguments: { samples: 8, ignore: ["motion blur"] } });
+{ const t = r.content[1].text;
+  check("review: music sync score", /cuts on a beat hit \(±2f\) 3\/5/.test(t) && /Off-beat cuts: .*3\.20s/.test(t) && /big moments 1\/1/.test(t), t);
+  check("review: too-fast cuts flagged", /Too fast for the music: 3\.2→3\.3s/.test(t), t);
+  check("review: ignore hides checks", !/motion blur/i.test(t.split("Checks:")[1] || ""), t); }
+auditMusic = false;
+r = await client.callTool({ name: "ae_fonts", arguments: { action: "list", query: "Archivo" } });
+check("fonts list via catalog", r.content[0].text.includes("AEH.catalog") && r.content[0].text.includes("Archivo"), r.content[0].text);
+r = await client.callTool({ name: "ae_fonts", arguments: { action: "install" } });
+check("fonts install needs families", r.isError && /families is required/.test(r.content[0].text));
+r = await client.callTool({ name: "ae_preview", arguments: { ui: true } });
+check("ui screenshot: clear error off Windows/macOS", process.platform === "linux" ? r.isError && /Windows and macOS/.test(r.content[0].text) : true, r.content[0].text);
 r = await client.callTool({ name: "ae_review", arguments: { reference: REFVID } });
 const cv = r.content.find((c) => c.type === "text")?.text || "";
 check("compare: paired grid + metrics", r.content[0].type === "image" && /Layout similarity: .*average \d+%/.test(cv) && /Motion rhythm correlation: -?[\d.]+/.test(cv) && cv.includes("Colour (avg)"), "\n" + cv.split("\n").slice(1, 3).join("\n"));
@@ -147,7 +162,7 @@ check("music add analyses", /120(\.\d)? BPM/.test(r.content[0].text), r.content[
 r = await client.callTool({ name: "ae_music", arguments: { action: "search", query: "upbeat", bpm_min: 110, bpm_max: 130 } });
 check("music search", r.content[0].text.startsWith("click-test |"), r.content[0].text);
 r = await client.callTool({ name: "ae_music", arguments: { action: "use", id: "click-test", comp: "Main", start: 1 } });
-check("music use adds markers + credit", r.content[0].text.includes("beat markers") && r.content[0].text.includes("CC BY 4.0") && markers.times[0] >= 1, r.content[0].text);
+check("music use adds markers + credit", r.content[0].text.includes("rhythm markers") && r.content[0].text.includes("Cut pulse") && r.content[0].text.includes("CC BY 4.0") && markers.times[0] >= 1, r.content[0].text);
 r = await client.callTool({ name: "ae_guide", arguments: { topic: "music" } });
 check("music + inspiration guides", r.content[0].text.startsWith("# Music library"));
 r = await client.callTool({ name: "ae_memory", arguments: { action: "delete", kind: "style", match: "#FF6A3D" } });

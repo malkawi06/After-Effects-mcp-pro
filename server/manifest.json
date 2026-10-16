@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "after-effects-mcp-pro",
   "display_name": "After Effects MCP Pro",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "Senior-level control of a live After Effects session: ExtendScript with a pro motion library, expert visual review and reference comparison, beat detection, checkpoints, background renders, TTS, on-demand expert guides and opt-in memory. Requires the Claude Bridge CEP panel.",
   "author": {
     "name": "Mohammad Malkawi",
@@ -70,7 +70,11 @@
     },
     {
       "name": "ae_music",
-      "description": "Royalty-free music library: add, search, use with beat markers"
+      "description": "Royalty-free music library: add, search, use with a rhythm map and typed markers (pulse hits, drops, breaks)"
+    },
+    {
+      "name": "ae_fonts",
+      "description": "List installed fonts, install Google Fonts (OFL), preview options side by side"
     }
   ],
   "compatibility": {
