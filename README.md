@@ -5,7 +5,7 @@
 [![MCP](https://img.shields.io/badge/MCP-server-8D1E2D)](https://modelcontextprotocol.io)
 [![Tests](https://img.shields.io/badge/tests-78%20passing-007A3D)](server/test)
 
-**Let Claude work inside Adobe After Effects like a senior motion designer. It builds, sees, critiques and renders, and it spends as few tokens as possible doing it.**
+**Claude works inside Adobe After Effects like a senior motion designer: it builds, watches its own output, fixes what fails, and renders.**
 
 ![Hello wink: built by Claude in After Effects](docs/hello-wink.gif)
 
@@ -15,7 +15,7 @@
 
 ---
 
-## Why another After Effects MCP?
+## Why this one?
 
 Most After Effects MCP servers expose a fixed list of commands, such as "create text layer" or "set keyframe", and leave the model blind: it never sees what it made. AE MCP Pro takes a different approach:
 
@@ -25,12 +25,20 @@ Most After Effects MCP servers expose a fixed list of commands, such as "create 
 | Can Claude see the result? | No | **Yes**: frame grids plus a motion, keyframe and audio timeline |
 | Quality control | None | **Automatic checks**: safe area, empty frames, linear keys, motion blur, audio sync |
 | References | — | **Analyse a reference video, image or song** (beats → markers), then **compare your comp side by side** |
-| Safety | — | **Checkpoints + revert**, read-only mode, every call logged |
+| Safety | — | **Checkpoints + revert**, read-only mode, raw code off by default, outputs limited to one folder, every call logged |
 | Expertise | — | **On-demand expert guides** (transitions, type, camera, audio sync, expressions, delivery, references) |
 | Rendering | In-app (freezes AE) or none | **Background `aerender`**, so AE stays usable |
 | Voice-over | — | **Built-in TTS** with OS voices |
 | Transport | Often polled JSON files | **Local HTTP with a secret token**, results returned in the same call |
 | Token cost | Not measured | **Measured and optimised** ([see below](#token-efficiency)) |
+
+## Quick start
+
+1. Install the extension and the panel ([full guide](docs/SETUP.md)).
+2. In After Effects: **Window → Extensions → Claude Bridge**. Wait for the green dot.
+3. Ask Claude for a motion piece in one sentence. Start with a short one, like the 5-second example below.
+
+New in 1.6.0: a sound-effect library with hit points, review checks for render traps, live font loading, and a render that reports `incomplete` when it stops early. See the [changelog](CHANGELOG.md).
 
 ## How it works
 
