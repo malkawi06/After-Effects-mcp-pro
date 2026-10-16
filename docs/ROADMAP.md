@@ -34,6 +34,17 @@ Agreed with the project owner (Mohammad Malkawi), October 2026.
 - Real screen recording of After Effects being driven by Claude (recorded by the user with OBS / Win+Alt+R), combined with motion graphics built by the tool.
 - The style is proposed after the inspiration step. This is the first end-to-end test of the whole system.
 
+## Status (version 1.6.0)
+Done: beat-synced music library, SFX library with hit points and motion filter, live font loading on Windows, review checks for render traps (CC Radial Blur, transparent edges on adjustment layers, coplanar 3D layers, 2D text under 3D, layers over 30,000 px), render reported as `incomplete` when it stops early, raw ExtendScript off by default, outputs limited to `Documents/AE-Claude`.
+
+Open, in order:
+1. Live test on a real After Effects setup for everything in 1.6.0 (none of it has run in AE yet).
+2. Seed the SFX library with the promo's sounds (Pixabay, with licence text).
+3. Automatic SFX placement: `ae_review` finds big moves and suggests a sound per moment.
+4. Review check: a big move with no sound near it is flagged.
+5. Forced checkpoint before risky edits, and a file signature for recipes.
+6. Install helper that checks panel, host and server versions match before it runs.
+
 ## Build order
 1. Fix the issues found in the first live run:
    - the edge check misses small text;

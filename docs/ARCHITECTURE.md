@@ -48,9 +48,24 @@ Adobe After Effects (DOM)            aerender (separate process for renders)
 - Bridge reachable only on 127.0.0.1 with a random 48-hex token; browser requests are refused.
 - Raw ExtendScript is the main power and the main risk: the panel can switch it off, and read-only mode blocks every write call.
 - Downloads: https only, allow-listed hosts (pixabay.com, freemusicarchive.org, incompetech.com, raw.githubusercontent.com via the GitHub API for fonts), content checked by magic bytes and size.
-- Output paths from the model must be absolute with the expected extension (`.mp4`, `.aep`, `.wav`, `.png`).
+- Output paths from the model must be absolute with the expected extension (`.mp4`, `.aep`, `.wav`, `.png`) and inside `Documents/AE-Claude`. Files outside that folder are never overwritten.
+- Raw ExtendScript is off until the user ticks the panel switch; the switch is stored per user, not per project.
 - Logs contain tool name, timing, result and error kind, never arguments or project content.
 - Limitation: `ae_run_jsx` code is not sandboxed. ExtendScript has file and system access, so the panel switches are the control, not prompt rules.
+- Recipes saved with `save_as` run only through `AEH.recipe`, which is inside `ae_run_jsx`. They get no extra power, so the raw ExtendScript switch covers them too.
+- Text to speech passes its text through environment variables, never the PowerShell command line, so it cannot inject commands.
+
+### Threat model (short)
+
+| Threat | Example | Control | Status |
+|---|---|---|---|
+| Prompt injection from a file or page | A downloaded note tells Claude to run code | Raw ExtendScript off by default; user ticks it on | Covered |
+| Other local programs calling the bridge | A web page or app sends requests to 127.0.0.1 | Random token, timing-safe compare, browser requests refused | Covered |
+| Overwriting user files through outputs | `output` set to a project file | Paths limited to `Documents/AE-Claude` | Covered |
+| Malicious download as a track | A music URL returns a script | https only, allow-listed hosts, magic bytes, size limit | Covered |
+| Token read by other local users | Token file readable by others | Token stored in the user profile file | Partly: depends on OS file permissions |
+| Malicious code run by a recipe on disk | A file written into the recipes folder | Recipes only run inside a call the user allowed | Partly: a file-level signature is not implemented |
+| Harm from the code the model writes | Deleting layers or the project | Checkpoints before risky edits | Partly: not forced yet |
 
 ## State and caching
 

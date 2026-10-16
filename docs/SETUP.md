@@ -87,7 +87,7 @@ Then add this to your client's MCP config:
    |---|---|
    | 🟢 *Listening on 127.0.0.1:47811* | Ready |
    | 🔴 dot or an error | Not running (see Troubleshooting) |
-   | **Allow Claude to run raw ExtendScript** | Untick to block arbitrary code. Inspection, preview and review keep working |
+   | **Allow Claude to run raw ExtendScript** | Off by default. Tick it while you work with Claude; untick to block arbitrary code. Inspection, preview and review keep working |
    | **Read-only** | Claude can look but not change anything |
    | Log | Every call, its duration, errors, and the first line of any code |
 
