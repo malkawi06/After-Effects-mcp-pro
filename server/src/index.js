@@ -215,6 +215,9 @@ async function decodeAudio(file) {
   const [L, R] = r.channelData;
   return { rate: r.sampleRate, n: r.samplesDecoded, sample: R ? (i) => (L[i] + R[i]) / 2 : (i) => L[i] };
 }
+// Sound design per motion type: which tags a sound needs, and its default level under the music (dB).
+const MOTION_TAGS = { transition: ["whoosh", "swoosh", "riser", "rev"], impact: ["impact", "boom", "braam", "sub"], reveal: ["light", "chime", "glitch", "keys"], ui: ["click", "tick", "beep", "keys"] };
+const MOTION_DB = { transition: -12, impact: -10, reveal: -14, ui: -16 };
 // Hit point of a short SFX: centre of the loudest 10 ms window (impact transient, whoosh pass, riser peak).
 function hitPoint(d) {
   const w = Math.max(1, Math.round(d.rate * 0.01));
@@ -855,6 +858,7 @@ server.registerTool("ae_music", {
     min_seconds: z.number().optional(), energy: z.enum(["low", "mid", "high"]).optional(),
     id: z.string().optional(), comp: z.string().optional(), start: z.number().optional(), db: z.number().optional(), markers: z.boolean().optional(),
     sfx: z.boolean().optional().describe("add: short sound effect (whoosh/impact/riser/click), tag it by motion type"),
+    motion: z.enum(["transition", "impact", "reveal", "ui"]).optional().describe("sfx search/use: the kind of motion the sound is for"),
     offset: z.number().optional().describe("seconds into the track"), drop_at: z.number().optional().describe("comp time the first drop lands on"),
   },
 }, tool(async (a) => {
@@ -884,8 +888,8 @@ server.registerTool("ae_music", {
     return text(`Added ${id}: ${rec.bpm} BPM (cut pulse ${rh.pulse}s), ${rec.duration}s, ${rec.energy} energy (${rec.loudness} dBFS), curve ${rec.curve.join(" ")}, drops at ${rh.drops.slice(0, 4).join(", ") || "none"}s`);
   }
   if (a.action === "search") {
-    const q = words(a.query);
-    const res = ix.filter((t) => (a.bpm_min == null || t.bpm >= a.bpm_min) && (a.bpm_max == null || t.bpm <= a.bpm_max) &&
+    const q = words(a.query), mt = a.motion ? MOTION_TAGS[a.motion] : null;
+    const res = ix.filter((t) => (!mt || (t.kind === "sfx" && t.tags.some((g) => mt.some((w) => g.includes(w))))) && (a.bpm_min == null || t.bpm >= a.bpm_min) && (a.bpm_max == null || t.bpm <= a.bpm_max) &&
       (a.min_seconds == null || t.duration >= a.min_seconds) && (!a.energy || t.energy === a.energy))
       .map((t) => [q.reduce((sc, w) => sc + (t.tags.some((g) => g.includes(w)) ? 2 : 0) + (t.title.toLowerCase().includes(w) ? 1 : 0), 0), t])
       .filter(([sc]) => !q.length || sc > 0).sort((x, y) => y[0] - x[0]).slice(0, 6);
@@ -897,7 +901,8 @@ server.registerTool("ae_music", {
   if (a.action === "remove") { saveIndex(ix.filter((x) => x.id !== a.id)); fs.rmSync(t.file, { force: true }); return text(`Removed ${a.id}.`); }
   if (t.kind === "sfx") {   // the sound's hit (peak) lands on start
     const st = (a.start || 0) - t.hit, file = t.file.replace(/\\/g, "/");
-    const r = await bridge("runJsx", { code: `var c = AEH.comp(${JSON.stringify(a.comp || "")}); var l = AEH.audio(c, ${JSON.stringify(file)}, 0, ${a.db ?? -12});
+    const mk = a.motion || Object.keys(MOTION_TAGS).find((k) => t.tags.some((g) => MOTION_TAGS[k].some((w) => g.includes(w)))), db = a.db ?? (mk ? MOTION_DB[mk] : -12);
+    const r = await bridge("runJsx", { code: `var c = AEH.comp(${JSON.stringify(a.comp || "")}); var l = AEH.audio(c, ${JSON.stringify(file)}, 0, ${db});
       l.startTime = ${st}; l.inPoint = Math.max(0, ${st}); l.name = ${JSON.stringify(`SFX ${t.id} @${(a.start || 0).toFixed(2)}`)}; ({ comp: c.name, layer: l.name })`, undoName: "Add SFX" });
     return text(`${r.layer} on ${r.comp}: hit at ${a.start || 0}s.`);
   }
