@@ -24,7 +24,7 @@ import { analyseBeats, analyseRhythm, toComp, rhythmMap, keyHits, scoreSync, syn
 
 const CFG_PATH = path.join(os.homedir(), ".ae-claude-bridge.json");
 const WORK_DIR = path.join(os.homedir(), "Documents", "AE-Claude");
-const SERVER_VERSION = "1.5.0";
+const SERVER_VERSION = "1.6.0";
 const CALL_TIMEOUT_MS = 55_000;           // stay under the client's 60 s request timeout
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

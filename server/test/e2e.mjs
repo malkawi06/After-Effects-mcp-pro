@@ -83,7 +83,7 @@ check("instructions", (client.getInstructions() || "").includes("textAnim") && c
 let r = await client.callTool({ name: "ae_status", arguments: {} });
 check("status", r.content[0].text.includes("26.3"));
 { const st = JSON.parse(r.content[0].text);
-  check("status: capabilities + version-mismatch warning", st.capabilities?.server === "1.5.0" && /Version mismatch/.test((st.warnings || []).join()), r.content[0].text); }
+  check("status: capabilities + version-mismatch warning", st.capabilities?.server === "1.6.0" && /Version mismatch/.test((st.warnings || []).join()), r.content[0].text); }
 { const lt = (await client.listTools()).tools, an = Object.fromEntries(lt.map((t) => [t.name, t.annotations || {}]));
   check("annotations: read-only vs destructive", an.ae_inspect.readOnlyHint === true && an.ae_run_jsx.destructiveHint === true && an.ae_music.openWorldHint === true); }
 r = await client.callTool({ name: "ae_run_jsx", arguments: { code: "1+1", undo: false } });

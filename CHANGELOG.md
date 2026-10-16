@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.0
+Lessons from building the CONTROL THE MOTION promo (56 s, 1080p60) entirely through the tool.
+- `ae_music`: SFX library. `sfx: true` (automatic under 2 s) stores the sound's hit point (loudest 10 ms window); `use` places that hit exactly on `start`. Tag by motion type (whoosh, impact, riser, click…).
+- `ae_fonts`: on Windows, new fonts are loaded into the running session (AddFontResource + WM_FONTCHANGE), so no logout is needed.
+- `ae_preview`: up to 120 s per frame for heavy 3D/DOF frames, with an actionable error instead of a bare timeout.
+- `ae_review` checks: CC Radial Blur (stalls renders), blur on adjustment layers without CC RepeTile (transparent edges), nearly coplanar 3D siblings with different orientation, 2D text under 3D layers.
+
 ## 1.5.0
 Hardening pass against an engineering checklist (inspection, discovery, security, rendering, observability).
 - `ae_inspect`: `layer` (name, index or `#id`) for one layer in depth (transform values, keyframes with values and interpolation, effect parameters, text style, expression errors); `offset` / `limit` paging; the project view lists missing footage and render-queue size, with file names instead of full paths.

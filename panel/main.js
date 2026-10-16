@@ -5,7 +5,7 @@
   var CFG_PATH = path.join(os.homedir(), ".ae-claude-bridge.json");
   var PORT = 47811;
   var MAX_BODY = 8 * 1024 * 1024;
-  var PANEL_VERSION = "1.5.0";
+  var PANEL_VERSION = "1.6.0";
   function sameToken(t) {   // constant-time compare
     var a = Buffer.from(String(t || "")), b = Buffer.from(token);
     return a.length === b.length && crypto.timingSafeEqual(a, b);

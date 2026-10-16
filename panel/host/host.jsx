@@ -605,7 +605,7 @@ var AEH = AEH || {};
         status: function () {
             var a = app.project.activeItem;
             var ids = false; try { ids = a instanceof CompItem && a.numLayers ? AEH.layerId(a.layer(1)) !== null : false; } catch (e) {}
-            return { aeVersion: app.version, host: "1.5.0", layerIds: ids, project: app.project.file ? app.project.file.fsName : null,
+            return { aeVersion: app.version, host: "1.6.0", layerIds: ids, project: app.project.file ? app.project.file.fsName : null,
                      dirty: app.project.dirty, numItems: app.project.numItems,
                      activeComp: a instanceof CompItem ? a.name : null,
                      appFolder: Folder.appPackage.fsName };
@@ -653,6 +653,18 @@ var AEH = AEH || {};
         },
         // Expert checks on a comp + timing data (key times, audio files) for the visual review strip.
         audit: function (args) {
+            // Effects that stall renders or leave transparent edges (both bit the CONTROL THE MOTION promo).
+            function fxChecks(l, issues) {
+                var fx = l.property("ADBE Effect Parade"), edge = false;
+                if (!fx) return;
+                for (var e = 1; e <= fx.numProperties; e++) {
+                    var m = fx.property(e).matchName;
+                    if (m === "CC RepeTile") edge = true;
+                    if (m === "CC Radial Blur") issues.push(l.name + ": CC Radial Blur is very slow (can stall preview/render) — use Radial Blur (Zoom, Draft) instead");
+                    if (l.adjustmentLayer && !edge && /^(ADBE Motion Blur|ADBE Radial Blur|ADBE Box Blur2)$/.test(m))
+                        issues.push(l.name + ": blur on an adjustment layer pulls in transparent frame edges — add CC RepeTile before it");
+                }
+            }
             var SPATIAL = { "ADBE Position": 1, "ADBE Position_0": 1, "ADBE Position_1": 1, "ADBE Position_2": 1, "ADBE Anchor Point": 1,
                 "ADBE Scale": 1, "ADBE Rotate Z": 1, "ADBE Rotate X": 1, "ADBE Rotate Y": 1, "ADBE Orientation": 1 };
             var c = AEH.comp(args.comp), issues = [], keyTimes = [], audio = [], moving = 0, linear = 0;
@@ -676,6 +688,7 @@ var AEH = AEH || {};
                     } catch (e) {}
                 }
             }
+            var sib = {}, any3D = false;
             for (var i = 1; i <= c.numLayers; i++) {
                 var l = c.layer(i);
                 if (!l.enabled && !l.hasAudio) continue;
@@ -688,6 +701,16 @@ var AEH = AEH || {};
                 if (movesThis && l.hasVideo && !l.motionBlur) issues.push(l.name + ": moves but layer motion blur is off");
                 if (l.inPoint >= c.duration || l.outPoint <= 0) issues.push(l.name + ": entirely outside the comp's time range");
                 if (l.source && l.source.footageMissing) issues.push(l.name + ": footage missing");
+                fxChecks(l, issues);
+                if (l.threeDLayer && l.parent && tg) {   // coplanar siblings with different orientation slice through each other
+                    var key = "p" + l.parent.index, ori = String(tg.property("ADBE Orientation").value);
+                    if (!sib[key]) sib[key] = [];
+                    for (var s = 0; s < sib[key].length; s++) if (sib[key][s].ori !== ori && Math.abs(sib[key][s].z - tg.property("ADBE Position").value[2]) < 5)
+                        issues.push(l.name + " and " + sib[key][s].name + ": nearly coplanar 3D layers with different orientation — one cuts through the other");
+                    sib[key].push({ name: l.name, ori: ori, z: tg.property("ADBE Position").value[2] });
+                }
+                if (l.threeDLayer && l.enabled) any3D = true;
+                else if (any3D && l instanceof TextLayer && l.enabled) issues.push(l.name + ": 2D text below 3D layers — they draw over it; move it above them");
                 if (l.hasAudio && l.audioEnabled && l.source && l.source.file)
                     audio.push({ name: l.name, file: l.source.file.fsName, startTime: l.startTime, inPoint: l.inPoint, outPoint: l.outPoint,
                                  levels: l.property("ADBE Audio Group").property("ADBE Audio Levels").value });

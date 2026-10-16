@@ -49,8 +49,8 @@ Most After Effects MCP servers expose a fixed list of commands, such as "create 
 | `ae_guide` | Loads one expert cookbook on demand: transitions, typography, camera-3d, audio-sync, expressions, deliver, reference |
 | `ae_render` / `ae_render_status` | Background H.264 render via `aerender`, with progress |
 | `ae_tts` | Generates a voice-over WAV with Windows SAPI or macOS `say` voices |
-| `ae_music` | Royalty-free **music library**: adds downloaded tracks after a license check, measures BPM/beats/energy, finds the right track for a brief. `use` returns a **rhythm map** (cut pulse, quiet/loud sections, drops, breaks, strongest hits), drops typed markers and can trim the track so the drop lands where you want (`drop_at`) |
-| `ae_fonts` | Lists installed fonts, installs free **Google Fonts** (OFL only, per user, no admin), and previews 3 options side by side so you can pick |
+| `ae_music` | Royalty-free **music + SFX library**: adds downloaded tracks after a license check, measures BPM/beats/energy, finds the right track for a brief. `use` returns a **rhythm map** (cut pulse, quiet/loud sections, drops, breaks, strongest hits), drops typed markers and can trim the track so the drop lands where you want (`drop_at`). **SFX** (`sfx: true`, automatic under 2 s) store their hit point (the impact, the whoosh pass, the riser peak), tagged by motion type; `use` puts that hit exactly on the frame you name |
+| `ae_fonts` | Lists installed fonts, installs free **Google Fonts** (OFL only, per user, no admin), and previews 3 options side by side so you can pick. On Windows new fonts load into the running session (no logout) |
 | `ae_memory` | **Technique cards** learned from references (saved automatically, you can delete them), lessons and recipes; your personal style only when you ask |
 
 ### The visual review
@@ -65,7 +65,7 @@ Audio: whoosh.wav: starts 0.00s, loudest around 0.43s; wink_chime.wav: starts 1.
 Checks: no issues found
 ```
 
-The motion measure is normalised per frame, so a fade to black is reported as a brightness change, not as motion. Checks include content touching the frame edge, empty frames, linear keyframes, moving layers without motion blur, keyframes after the comp ends, layers outside the time range, and missing footage, and expression errors.
+The motion measure is normalised per frame, so a fade to black is reported as a brightness change, not as motion. Checks include content touching the frame edge, empty frames, linear keyframes, moving layers without motion blur, keyframes after the comp ends, layers outside the time range, missing footage, expression errors, and render traps: CC Radial Blur (stalls renders), blurs on adjustment layers that pull in transparent edges, nearly coplanar 3D layers with different orientation that cut through each other, and 2D text sitting under 3D layers.
 
 With `reference: "C:/refs/intro.mp4"` the grid pairs your frames with the reference at the same normalised times, and the report gives layout similarity per moment, a motion-rhythm correlation (1 = same timing) and average colours. The strip then shows your motion in orange and the reference's in violet.
 
