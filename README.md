@@ -34,7 +34,7 @@ Most After Effects MCP servers expose a fixed list of commands, such as "create 
 
 ## Promo video
 
-<video src="docs/promo-preview.mp4" autoplay muted loop playsinline width="100%" aria-label="Promo preview: built by Claude in After Effects"></video>
+![Promo preview: built by Claude in After Effects](docs/promo-preview.webp)
 
 *A preview of the full promo (56 s, 1080p, 60 fps), built from one prompt with this tool.*
 
@@ -45,8 +45,6 @@ Most After Effects MCP servers expose a fixed list of commands, such as "create 
 - **It checks its own work.** Frames, timing and audio are reviewed before rendering, and common mistakes are caught with a message that says what to fix.
 - **Arabic-ready.** Right-to-left type, calligraphy, and Google Fonts that load straight into the session.
 - **Safe by default.** Raw code is off until you turn it on, outputs stay in one folder, and every call is logged without its content.
-
-> A short demo video goes here once it is published. Until then, the `hello-wink` clip above is the reference.
 
 ## Quick start
 
