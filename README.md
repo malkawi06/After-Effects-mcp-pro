@@ -32,6 +32,10 @@ Most After Effects MCP servers expose a fixed list of commands, such as "create 
 | Transport | Often polled JSON files | **Local HTTP with a secret token**, results returned in the same call |
 | Token cost | Not measured | **Measured and optimised** ([see below](#token-efficiency)) |
 
+## Promo video
+
+[▶ Watch the promo (1080p, 60 fps, 56 s)](media/CONTROL_THE_MOTION_promo.mp4). Made entirely from one prompt with this tool.
+
 ## Why people will want it
 
 - **One sentence in, a finished piece out.** Claude builds the layers, keyframes, camera and transitions inside After Effects, and you get a real project you can open and edit.
