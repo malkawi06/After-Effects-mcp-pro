@@ -34,7 +34,9 @@ Most After Effects MCP servers expose a fixed list of commands, such as "create 
 
 ## Promo video
 
-[▶ Watch the promo (1080p, 60 fps, 56 s)](media/CONTROL_THE_MOTION_promo.mp4). Made entirely from one prompt with this tool.
+![Promo preview: built by Claude in After Effects](docs/promo-preview.gif)
+
+*A preview of the full promo (56 s, 1080p, 60 fps), built from one prompt with this tool.*
 
 ## Why people will want it
 
