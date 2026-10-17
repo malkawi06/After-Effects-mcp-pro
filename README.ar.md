@@ -10,7 +10,7 @@
 
 ## الفيديو التعريفي
 
-![معاينة الفيديو التعريفي](docs/promo-preview.gif)
+<video src="docs/promo-preview.mp4" autoplay muted loop playsinline width="100%" aria-label="معاينة الفيديو التعريفي"></video>
 
 *معاينة من الفيديو الكامل (56 ثانية، 1080p، 60 فريم)، انعمل من برومت واحد بهالأداة.*
 

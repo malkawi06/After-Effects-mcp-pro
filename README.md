@@ -34,7 +34,7 @@ Most After Effects MCP servers expose a fixed list of commands, such as "create 
 
 ## Promo video
 
-![Promo preview: built by Claude in After Effects](docs/promo-preview.gif)
+<video src="docs/promo-preview.mp4" autoplay muted loop playsinline width="100%" aria-label="Promo preview: built by Claude in After Effects"></video>
 
 *A preview of the full promo (56 s, 1080p, 60 fps), built from one prompt with this tool.*
 
